@@ -17,11 +17,12 @@ There is currently no functionality for image description.
 
 ## Usage
 
-From with a Python program:
+From within a Python program:
 
 ```python
 from abbyy_to_epub3 import create_epub
-create_epub.craft_epub('docname') # See *Assumptions* below.
+book = create_epub.Ebook('docname')  # See *Assumptions* below.
+book.craft_epub()
 ```
 
 From the shell:
@@ -64,17 +65,8 @@ ABBYY.
 
 ## TODO
 
-1. Unit tests
-1. Logging
-1. Exception handling
-1. Adding nesting to the navigation
-1. Extracting images with some alternative text of some kind
+1. Testing:
+    1. Unit tests
+    1. Running Epubcheck
+    1. Accessibility testing
 1. Handling more of the limited ABBYY semantic markup
-1. Running Epubcheck
-1. Enable running on multiple documents at once
-1. Put some commonsense error checking on text marked up with "Heading" to 
-ignore that markup if the text element is more than a certain length.
-1. Verify that headings close out correctly in the code.
-1. Verify that it does RTL langs correctly
-1. Accessibility testing
-1. Ignore repeated separator elements

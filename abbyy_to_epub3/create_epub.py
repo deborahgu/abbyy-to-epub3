@@ -16,134 +16,256 @@ from ebooklib import epub
 from PIL import Image
 
 import gzip
-import os, sys
+import logging
+import os
+import sys
+import tempfile
 from zipfile import ZipFile
 
-from abbyy_to_epub3.parse_abbyy import parse_abbyy
-
-def craft_epub(document_basename):
-    """ Assemble the extracted metadata & text into an EPUB  """
-
-    # document files
-    abbyy_file_zipped = "{base}/{base}_abbyy.gz".format(base=document_basename)
-    abbyy_file = "{base}/{base}_abbyy".format(base=document_basename)
-    images_zipped = "{base}/{base}_jp2.zip".format(base=document_basename)
-    cover_file_name = "{base}_jp2/{base}_0001.jp2".format(base=document_basename)
-    metadata_file = "{base}/{base}_meta.xml".format(base=document_basename)
-
-    # unzip as necessary. 
-    # Write files to disk. These might be too huge to hold in memory.
-    with gzip.open(abbyy_file_zipped, 'rb') as infile:
-        with open(abbyy_file, 'wb') as outfile:
-            for line in infile:
-                outfile.write(line)
-    with ZipFile(images_zipped) as f:
-        cover_file = f.extract(cover_file_name)
-
-    # dictionaries to store the extracted data
-    metadata = {}
-    blocks = []     # each text or non-text block, with contents & attributes
-    paragraphs = {} # paragraph style info
-
-    book = epub.EpubBook()
-
-    # convert our directionality abbreviation to ebooklib abbreviation
-    direction = {
-        'lr': 'ltr',
-        'rl': 'rtl',
-    }
-
-    # convert the JP2K file into a PNG for the cover
-    f, e = os.path.splitext(os.path.basename(cover_file_name))
-    pngfile = f + ".png"
-    try:
-        Image.open(cover_file).save(pngfile)
-    except IOError as e:
-        print("Cannot create cover file: {}".format(e))
-
-    # parse the ABBYY
-    parse_abbyy(abbyy_file, metadata_file, metadata, paragraphs, blocks)
-
-    # Set the metadata
-    if 'page-progression' in metadata:
-        progression = direction[metadata['page-progression'][0]]
-    else:
-        progression = 'default'
-
-    book.set_cover('cover.png', open(pngfile, 'rb').read())
-    book.set_direction(progression)
-    for identifier in metadata['identifier']:
-        book.set_identifier(identifier)
-    for language in metadata['language']:
-        book.set_language(language)
-    for title in metadata['title']:
-        book.set_title(title)
-    for creator in metadata['creator']:
-        book.add_author(creator)
-    for description in metadata['description']:
-        book.add_metadata('DC', 'description', description)
-    for publisher in metadata['publisher']:
-        book.add_metadata('DC', 'publisher', publisher)
+from abbyy_to_epub3.parse_abbyy import AbbyyParser
 
 
-    # Craft the EPUB sections.
-    # Break sections at text elements marked role: heading,
-    # Break files at any headings with roleLevel: 1
-    # This will be greatly imperfect, but better than having no navigation
+logger = logging.getLogger(__name__)
 
-    # create chapter
-    chapters = []
-    # Default section to hold cover image & everything until the first heading
-    heading = "Title"
-    chapter_no = 1
-    content = ""
-    for block in blocks:
-        if 'text' in block:
-            if 'heading' not in block:
-                # Regular textblock. Add its heading to the chapter content.
-                content += u'<p>{}</p>'.format(block['text'])
+
+class Ebook(object):
+    """
+    The Ebook object.
+
+    Holds extracted information about a book & the Ebooklib EPUB object.
+    """
+    base = ''         # the book's identifier, used in many filename
+    metadata = {}     # the book's metadata
+    blocks = []       # each text or non-text block, with contents & attributes
+    paragraphs = {}   # paragraph style info
+    tmpdir = ''       # stores converted images and extracted zip files
+    abbyy_file = ''   # the ABBYY XML file
+    cover_img = ''    # the name of the cover image
+    chapters = []     # holds each of the chapter (EpubHtml) objects
+    progression = ''  # page direction
+
+    book = epub.EpubBook()  # the book itself
+
+    def __init__(self, base):
+        self.base = base
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.cover_img = '{}/cover.png'.format(self.tmpdir.name)
+        self.abbyy_file = "{tmp}/{base}_abbyy".format(
+            tmp=self.tmpdir.name, base=self.base
+        )
+        logger.debug("Temp: {}\n Base: {}".format(
+            self.tmpdir.name, self.base))
+
+    def extract_images(self):
+        """
+        Extracts all of the images for the text.
+
+        For efficiency's sake, do these all at once. Memory and CPU will be at a
+        higher premium than disk space, so unzip the entire scan file into a temp
+        directory, instead of extracting only the needed images.
+        """
+        images_zipped = "{base}/{base}_jp2.zip".format(base=self.base)
+        cover_file = "{tmp}/{base}_jp2/{base}_0001.jp2".format(
+            tmp=self.tmpdir.name, base=self.base
+        )
+        with ZipFile(images_zipped) as f:
+            f.extractall(self.tmpdir.name)
+
+        # convert the JP2K file into a PNG for the cover
+        f, e = os.path.splitext(os.path.basename(cover_file))
+        try:
+            Image.open(cover_file).save(self.cover_img)
+        except IOError as e:
+            logger.warning("Cannot create cover file: {}".format(e))
+
+    def make_chapter(self, content, heading, chapter_no):
+        """
+        Create a chapter section in an ebooklib.epub.
+        """
+        chapter = epub.EpubHtml(
+            title=heading,
+            direction=self.progression,
+            # pad out the filename to four digits
+            file_name='chap_{:0>4}.xhtml'.format(chapter_no),
+            lang='{}'.format(self.metadata['language'][0])
+        )
+        chapter.add_link(
+            href='style/nav.css', rel='stylesheet', type='text/css'
+        )
+        chapter.content = content
+        self.chapters.append(chapter)
+        self.book.add_item(chapter)
+
+    def craft_html(self):
+        """
+        Assembles the XHTML content.
+
+        Create some minimal navigation:
+        * Break sections at text elements marked role: heading
+        * Break files at any headings with roleLevel: 1
+        This is imperfect, but better than having no navigation or monster files.
+
+        Images will get the alternative text of "Picture #" followed by an index
+        number for this image in the document. Barring real alternative text for
+        true accessibility, this at least adds some identifying information.
+        """
+
+        # Default section to hold cover image & everything until the first heading
+        heading = "Cover"
+        chapter_no = 1
+        picnum = 1
+        content = ""
+
+        for block in self.blocks:
+            if 'text' in block:
+                if 'heading' not in block:
+                    # Regular text block. Add its heading to the chapter content.
+                    content += u'<p>{}</p>'.format(block['text'])
+                elif int(block['heading']) > 1:
+                    # Heading >1. Format as heading but don't make new chapter.
+                    content += u'<h{level}>{text}</h{level}>'.format(
+                        level=block['heading'], text=block['text']
+                    )
+                else:
+                    # Heading 1. Close off previous chapter & start a new one.
+                    self.make_chapter(content, heading, chapter_no)
+
+                    # Begin the new chapter
+                    chapter_no += 1
+                    heading = block['text']
+                    content = u'<h{level}>{text}</h{level}>'.format(
+                        level=block['heading'], text=heading
+                    )
+            elif block['type'] == 'Picture':  # and block['page_no'] != 1:
+                # Image
+                # pad out the filename to four digits
+                origfile = '{dir}/{base}_jp2/{base}_{page:0>4}.jp2'.format(
+                    dir=self.tmpdir.name,
+                    base=self.base,
+                    page=block['page_no']   # Skip scanner calibration
+                )
+                basefile = 'img_{:0>4}.png'.format(picnum)
+                pngfile = '{}/{}'.format(self.tmpdir.name, basefile)
+                in_epub_imagefile = 'images/{}'.format(basefile)
+
+                # get image dimensions from ABBYY block attributes
+                left = int(block['style']['l'])
+                top = int(block['style']['t'])
+                right = int(block['style']['r'])
+                bottom = int(block['style']['b'])
+                box = (left, top, right, bottom)
+                width = right - left
+                height = bottom - top
+
+                # make the image:
+                try:
+                    i = Image.open(origfile)
+                except IOError as e:
+                    logger.warning("Can't open image {}: {}".format(origfile, e))
+                try:
+                    i.crop(box).save(pngfile)
+                except IOError as e:
+                    logger.warning("Can't crop image {} and save to {}: {}".format(
+                        origfile, pngfile, e
+                    ))
+                epubimage = epub.EpubImage()
+                epubimage.file_name = in_epub_imagefile
+                with open(pngfile, 'rb') as f:
+                    epubimage.content = f.read()
+                epubimage = self.book.add_item(epubimage)
+
+                content += u'<img src="{src}" alt="Picture #{picnum}" width="{w}" height={h}>'.format(
+                    src=in_epub_imagefile,
+                    picnum=picnum,
+                    w=width,
+                    h=height,)
+
+                # increment the image number
+                picnum += 1
+            elif block['type'] in ('Separator' or 'SeparatorsBox'):
+                # Separator blocks seem to be fairly randomly applied and don't
+                # correspond to anything useful in the original content
+                pass
             else:
-                # A heading. Close off previous chapter & start a new one.
-                # Heading. Make a new chapter.
-                # FIXME:  figure out nesting
-                chapter = epub.EpubHtml(
-                    title=heading,
-                    # pad out the filename to four digits
-                    file_name='chap_{:0>4}.xhtml'.format(chapter_no),
-                    lang='{}'.format(metadata['language'][0])
-                )
-                chapter.add_link(href='style/nav.css', rel='stylesheet', type='text/css')
-                chapter.content = content
-                book.add_item(chapter)
-                chapters.append(chapter)
-                chapter_no += 1
-                # clear this out for next iteration; reset with chapter heading
-                heading = block['text']
-                content = u'<h{level}>{text}</h{level}>'.format(
-                    level=block['heading'], text=heading
-                )
-        elif block['type'] == 'Separator':
-            content += u'<hr />'
-        else:
-            # FIXME for now just print the block type is
-            content += "<div style='border:5; padding: 5'>Block type {}</div>".format(block['type'])
-    
-    # define Table Of Contents
-    book.toc = chapters
-    
-    # add default NCX and Nav file
-    book.add_item(epub.EpubNcx())
-    book.add_item(epub.EpubNav())
-    
-    # define CSS style
-    style = '.center {text-align: center}'
-    nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
-    
-    # add CSS file
-    book.add_item(nav_css)
-    
-    # basic spine
-    book.spine = ['nav'] + chapters
-    
+                logger.debug("Ignoring Block:\n Type: {}\n Attribs: {}".format(
+                    block['type'], block['style']))
 
-    epub.write_epub('{base}/{base}.epub'.format(base=document_basename), book, {})
+        # Make the remaining content into a chapter
+        self.make_chapter(content, heading, chapter_no)
+
+    def craft_epub(self):
+        """ Assemble the extracted metadata & text into an EPUB  """
+
+        # document files and directories
+        abbyy_file_zipped = "{base}/{base}_abbyy.gz".format(base=self.base)
+        metadata_file = "{base}/{base}_meta.xml".format(base=self.base)
+
+        # Unzip the ABBYY file to disk. (Might be too huge to hold in memory.)
+        with gzip.open(abbyy_file_zipped, 'rb') as infile:
+            with open(self.abbyy_file, 'wb') as outfile:
+                for line in infile:
+                    outfile.write(line)
+
+        # Extract the page images and create the cover file
+        self.extract_images()
+
+        # parse the ABBYY
+        parser = AbbyyParser(
+            self.abbyy_file,
+            metadata_file,
+            self.metadata,
+            self.paragraphs,
+            self.blocks
+        )
+        parser.parse_abbyy()
+
+        # Text direction: convert IA abbreviation to ebooklib abbreviation
+        direction = {
+            'lr': 'ltr',
+            'rl': 'rtl',
+        }
+        if 'page-progression' in self.metadata:
+            self.progression = direction[self.metadata['page-progression'][0]]
+        else:
+            self.progression = 'default'
+        self.book.set_direction(self.progression)
+
+        # make the HTML chapters
+        self.craft_html()
+
+        # Set the book's metadata and cover
+        self.book.set_cover('images/cover.png', open(self.cover_img, 'rb').read())
+        for identifier in self.metadata['identifier']:
+            self.book.set_identifier(identifier)
+        for language in self.metadata['language']:
+            self.book.set_language(language)
+        for title in self.metadata['title']:
+            self.book.set_title(title)
+        if 'creator' in self.metadata:
+            for creator in self.metadata['creator']:
+                self.book.add_author(creator)
+        if 'description' in self.metadata:
+            for description in self.metadata['description']:
+                self.book.add_metadata('DC', 'description', description)
+        if 'publisher' in self.metadata:
+            for publisher in self.metadata['publisher']:
+                self.book.add_metadata('DC', 'publisher', publisher)
+
+        # Navigation for EPUB 3 & EPUB 2 fallback
+        self.book.toc = self.chapters
+        self.book.add_item(epub.EpubNcx())
+        self.book.add_item(epub.EpubNav())
+        self.book.spine = ['nav'] + self.chapters
+
+        # define CSS style
+        style = '.center {text-align: center}'
+        nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
+        self.book.add_item(nav_css)
+
+        epub.write_epub('{base}/{base}.epub'.format(base=self.base), self.book, {})
+
+        # clean up
+        # ebooklib doesn't clean up cleanly without reset, causing problems on
+        # consecutive runs
+        self.tmpdir.cleanup()
+        self.book.reset()

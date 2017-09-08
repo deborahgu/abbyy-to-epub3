@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ABBYY_NS ='http://www.abbyy.com/FineReader_xml/FineReader10-schema-v1.xml'
+
+ABBYY_NS = 'http://www.abbyy.com/FineReader_xml/FineReader10-schema-v1.xml'
+OLD_NS = 'http://www.abbyy.com/FineReader_xml/FineReader6-schema-v1.xml'
 ABBYY_NSM = {
-    'a': ABBYY_NS
+    'a': ABBYY_NS,
+}
+OLD_NSM = {
+    'a': OLD_NS,
 }

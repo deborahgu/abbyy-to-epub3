@@ -20,9 +20,10 @@ usage = (
     "Usage: python create_epub.py [docname], where [docname] is a directory "
     "containing all the necessary files.\n"
     "See the README at https://github.com/deborahgu/abbyy-to-epub3 for details."
-        )
+)
 
 if docname:
-    create_epub.craft_epub(docname)
+    book = create_epub.Ebook(docname)  # See *Assumptions* below.
+    book.craft_epub()
 else:
     print(usage)
