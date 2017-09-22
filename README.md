@@ -21,6 +21,7 @@ there is no structural navigation for accessibility.
 ## Requirements
 
 * Python 3
+* If running epubcheck, a Java Runtime environment
 
 ## Usage
 
@@ -48,6 +49,16 @@ containing setup.py:
 pip install -r requirements.txt
 python setup.py develop
 pip install .
+```
+
+### System dependencies
+
+If you'd like to run Epubcheck, there are certain system dependencies.
+Depending on running environment, these may need to be manually installed.
+On Ubuntu, I installed these with:
+
+```bash
+sudo apt-get install default-jre libpython3-dev
 ```
 
 ### Testing
@@ -79,5 +90,5 @@ ABBYY.
 ## TODO
 
 1. Testing:
-    1. Running Epubcheck
+    1. A method for optionally running Epubcheck
     1. Accessibility testing

@@ -27,6 +27,7 @@ setup(
 
     install_requires=[
         'ebooklib',
+        'epubcheck',
         'lxml',
         'Pillow',
         'pytest',
