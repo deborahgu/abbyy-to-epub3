@@ -29,6 +29,7 @@ setup(
         'ebooklib',
         'lxml',
         'Pillow',
+        'pytest',
     ],
 
     scripts=['abbyy_to_epub3/bin/create_epub.py'],

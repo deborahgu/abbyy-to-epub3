@@ -44,8 +44,8 @@ class AbbyyParser(object):
             Text:
             <region>
             <text> contains a '\n' as a text element
-               <par>: The paragraph
-                <line>: The line
+               <par>: The paragraph, repeatable
+                <line>: The line, repeatable
                     <formatting>
                        <charParams>: The individual character
             Image:
@@ -79,6 +79,12 @@ class AbbyyParser(object):
         self.metadata = metadata
         self.paragraphs = paragraphs
         self.blocks = blocks
+
+        # Save page numbers only if using a supporting version of ebooklib
+        if hasattr(epub.EpubHtml, 'add_pageref'):
+            self.PAGES_SUPPORT = True
+        else:
+            self.PAGES_SUPPORT = False
 
     def is_text_block(self, elem):
         """ Identifies if an XML element is a textblock. """
@@ -123,15 +129,17 @@ class AbbyyParser(object):
     def parse_content(self):
         """ Parse each page of the book.  """
         page_no = 1
-        block_dict = {}
+        block_dict = {'page_no': page_no}
 
         pages = self.tree.findall(".//a:page", namespaces=self.nsm)
 
         pages.pop(0)    # ignore the calibration page
         for page in pages:
             block_per_page = page.getchildren()
+            if not block_per_page:
+                page_no += 1
+                continue
             for block in block_per_page:
-                block_dict['page_no'] = page_no
                 if self.is_text_block(block):
                     paras = block.findall(".//a:par", namespaces=self.nsm)
                     # Some blocks can have multiple styles in them. We'll treat
@@ -153,8 +161,7 @@ class AbbyyParser(object):
                             block_dict['text'] = text
 
                         self.blocks.append(block_dict)
-                        block_dict = {}
-                        block_dict['page_no'] = page_no
+                        block_dict = {'page_no': page_no}
                 else:
                     # Create an entry for non-text blocks with type & attributes
                     block_dict['type'] = block.get("blockType")
@@ -162,17 +169,22 @@ class AbbyyParser(object):
                     self.blocks.append(block_dict)
 
                 # Clean out the placeholder dict before the next loop
-                block_dict = {}
+                block_dict = {'page_no': page_no}
 
-            # For a11y, add a visually available page number after every page
-            block_dict['type'] = 'Text'
-            block_dict['text'] = u'<div class="center"><span epub:type="pagebreak" title="{page_no}" id="Page_{page_no}">Page {page_no}</span></div>'.format(page_no=page_no)
+            # Add the block to our list
+            self.blocks.append(block_dict)
+
+            # For accessibility, create a page number at the end of every page
+            if self.PAGES_SUPPORT:
+                block_dict = {
+                    'type': 'Page',
+                    'text': page_no,
+                }
+                self.blocks.append(block_dict)
 
             # Set up the next iteration.
-            block_dict['page_no'] = page_no
-            self.blocks.append(block_dict)
-            block_dict = {}
             page_no += 1
+            block_dict = {'page_no': page_no}
 
     def parse_metadata(self):
         """

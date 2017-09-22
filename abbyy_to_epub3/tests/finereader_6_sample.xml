@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document version="1.0" producer="LuraTech XML Exporter for ABBYY FineReader" pagesCount="126"           
+ xmlns="http://www.abbyy.com/FineReader_xml/FineReader6-schema-v1.xml" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.abbyy.com/FineReader_xml/FineReader6-schema-v1.xml http://www.abbyy.com/FineReader_xml/FineReader6-schema-v1.xml">
+<page width="1000" height="1500" resolution="650" originalCoords="true">
+<block blockType="Picture" l="0" t="0" r="1000" b="1500">
+<region><rect l="0" t="0" r="1000" b="1500"></rect></region>
+</block>
+</page>
+<page width="2594" height="3693" resolution="650" originalCoords="true">
+<block blockType="Picture" l="0" t="0" r="2594" b="3693">
+<region><rect l="0" t="0" r="2594" b="3693"></rect></region>
+</block>
+</page>
+<page width="2222" height="3541" resolution="650" originalCoords="true">
+<block blockType="Picture" l="0" t="0" r="2218" b="1842">
+<region><rect l="0" t="0" r="2218" b="1842"></rect></region>
+</block>
+<block blockType="Picture" l="906" t="2926" r="2222" b="3541">
+<region><rect l="906" t="2926" r="2222" b="3541"></rect></region>
+</block>
+<block blockType="Picture" l="0" t="3074" r="460" b="3541">
+<region><rect l="0" t="3074" r="460" b="3541"></rect></region>
+</block>
+</page>
+<page width="2222" height="3541" resolution="650" originalCoords="true">
+<block blockType="Text" l="2102" t="824" r="2222" b="952">
+<region><rect l="2102" t="824" r="2222" b="952"></rect></region>
+<text backgroundColor="12298091">
+<par align="Right" lineSpacing="1270">
+<line baseline="952" l="2129" t="837" r="2222" b="952"><formatting lang="Hebrew" ff="Default Metrics Font" fs="23." color="11310937" scaling="700"><charParams l="2185" t="837" r="2222" b="952" wordStart="false" wordFromDictionary="true" wordNormal="true" wordNumeric="false" wordIdentifier="false" wordPenalty="-7" meanStrokeWidth="36" charConfidence="28" serifProbability="255">ו</charParams>
+<charParams l="2129" t="853" r="2181" b="945" wordStart="true" wordFromDictionary="true" wordNormal="true" wordNumeric="false" wordIdentifier="false" wordPenalty="-7" meanStrokeWidth="36" charConfidence="31" serifProbability="255">י</charParams>
+</formatting>
+</line>
+</par>
+</text>
+</block>
+<block blockType="Picture" l="262" t="532" r="1766" b="1044">
+<region><rect l="262" t="532" r="1766" b="1044"></rect></region>
+</block>
+</page>
+</document>

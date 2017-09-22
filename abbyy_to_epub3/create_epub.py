@@ -43,6 +43,7 @@ class Ebook(object):
     cover_img = ''    # the name of the cover image
     chapters = []     # holds each of the chapter (EpubHtml) objects
     progression = ''  # page direction
+    pagelist = ''     # holds tthe page-list item
 
     book = epub.EpubBook()  # the book itself
 
@@ -78,10 +79,13 @@ class Ebook(object):
         except IOError as e:
             logger.warning("Cannot create cover file: {}".format(e))
 
-    def make_chapter(self, content, heading, chapter_no):
+    def make_chapter(self, heading, chapter_no):
         """
         Create a chapter section in an ebooklib.epub.
         """
+        if not heading:
+            heading = "Chapter {}".format(chapter_no)
+
         chapter = epub.EpubHtml(
             title=heading,
             direction=self.progression,
@@ -89,12 +93,14 @@ class Ebook(object):
             file_name='chap_{:0>4}.xhtml'.format(chapter_no),
             lang='{}'.format(self.metadata['language'][0])
         )
+        chapter.content = u''
         chapter.add_link(
             href='style/nav.css', rel='stylesheet', type='text/css'
         )
-        chapter.content = content
         self.chapters.append(chapter)
         self.book.add_item(chapter)
+
+        return chapter
 
     def craft_html(self):
         """
@@ -114,35 +120,43 @@ class Ebook(object):
         heading = "Cover"
         chapter_no = 1
         picnum = 1
-        content = ""
+        pagelist_html = '<nav epub:type="page-list" hidden="">'
+        pagelist_html += '<h1>List of Pages</h1>'
+        pagelist_html += '<ol>'
+
+        # Make the initial chapter stub
+        chapter = self.make_chapter(heading, chapter_no)
 
         for block in self.blocks:
-            if 'text' in block:
+            if 'type' not in block:
+                continue
+            if block['type'] == 'Text':
                 if 'heading' not in block:
                     # Regular text block. Add its heading to the chapter content.
-                    content += u'<p>{}</p>'.format(block['text'])
+                    chapter.content += u'<p>{}</p>'.format(block['text'])
                 elif int(block['heading']) > 1:
                     # Heading >1. Format as heading but don't make new chapter.
-                    content += u'<h{level}>{text}</h{level}>'.format(
+                    chapter.content += u'<h{level}>{text}</h{level}>'.format(
                         level=block['heading'], text=block['text']
                     )
                 else:
-                    # Heading 1. Close off previous chapter & start a new one.
-                    self.make_chapter(content, heading, chapter_no)
-
-                    # Begin the new chapter
+                    # Heading 1. Begin the new chapter
                     chapter_no += 1
+                    chapter = self.make_chapter(heading, chapter_no)
+
                     heading = block['text']
-                    content = u'<h{level}>{text}</h{level}>'.format(
+                    chapter.content = u'<h{level}>{text}</h{level}>'.format(
                         level=block['heading'], text=heading
                     )
-            elif block['type'] == 'Picture':  # and block['page_no'] != 1:
+            elif block['type'] == 'Page':
+                chapter.add_pageref(str(block['text']))
+            elif block['type'] == 'Picture':
                 # Image
                 # pad out the filename to four digits
                 origfile = '{dir}/{base}_jp2/{base}_{page:0>4}.jp2'.format(
                     dir=self.tmpdir.name,
                     base=self.base,
-                    page=block['page_no']   # Skip scanner calibration
+                    page=block['page_no']
                 )
                 basefile = 'img_{:0>4}.png'.format(picnum)
                 pngfile = '{}/{}'.format(self.tmpdir.name, basefile)
@@ -174,7 +188,7 @@ class Ebook(object):
                     epubimage.content = f.read()
                 epubimage = self.book.add_item(epubimage)
 
-                content += u'<img src="{src}" alt="Picture #{picnum}" width="{w}" height={h}>'.format(
+                chapter.content += u'<img src="{src}" alt="Picture #{picnum}" width="{w}" height={h}>'.format(
                     src=in_epub_imagefile,
                     picnum=picnum,
                     w=width,
@@ -189,9 +203,6 @@ class Ebook(object):
             else:
                 logger.debug("Ignoring Block:\n Type: {}\n Attribs: {}".format(
                     block['type'], block['style']))
-
-        # Make the remaining content into a chapter
-        self.make_chapter(content, heading, chapter_no)
 
     def craft_epub(self):
         """ Assemble the extracted metadata & text into an EPUB  """
