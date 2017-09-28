@@ -12,20 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import OrderedDict
 from ebooklib import epub
 from PIL import Image
+from pkg_resources import Requirement, resource_filename
 
+from zipfile import ZipFile
+
+import configparser
 import gzip
 import logging
 import os
 import sys
 import tempfile
-from zipfile import ZipFile
 
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
 
 
+# Set up logging and check configuration
 logger = logging.getLogger(__name__)
+config = configparser.ConfigParser()
+configfile = resource_filename(Requirement.parse("abbyy_to_epub3"), "config.ini")
+config.read(configfile)
 
 
 class Ebook(object):
@@ -56,6 +64,111 @@ class Ebook(object):
         )
         logger.debug("Temp: {}\n Base: {}".format(
             self.tmpdir.name, self.base))
+
+    def create_accessibility_metadata(self):
+        """ Set up accessibility metadata """
+        ALT_TEXT_PRESENT = config.getboolean('Main', 'ALT_TEXT_PRESENT')
+        IMAGES_PRESENT = config.getboolean('Main', 'IMAGES_PRESENT')
+        OCR_GENERATED = config.getboolean('Main', 'OCR_GENERATED')
+        TEXT_PRESENT = config.getboolean('Main', 'TEXT_PRESENT')
+
+        summary = ''
+        modes = []
+        modes_sufficient = []
+        features = ['printPageNumbers', 'tableOfContents', ]
+
+        if OCR_GENERATED:
+            summary += (
+                'The publication was generated using automated character recognition, '
+                'therefore it may not be an accurate rendition of the original text, '
+                'and it may not offer the correct reading sequence.'
+            )
+        if IMAGES_PRESENT:
+            modes.append('visual')
+            if ALT_TEXT_PRESENT:
+                features.append('alternativeText')
+            else:
+                summary += (
+                    'This publication is missing meaningful alternative text.'
+                )
+        if TEXT_PRESENT:
+            modes.append('textual')
+            if IMAGES_PRESENT:
+                modes_sufficient.append('textual,visual')
+                if ALT_TEXT_PRESENT:
+                    modes_sufficient.append('textual')
+            else:
+                modes_sufficient.append('textual')
+        elif IMAGES_PRESENT and ALT_TEXT_PRESENT:
+            modes_sufficient.append('textual,visual')
+            modes_sufficient.append('visual')
+        elif IMAGES_PRESENT:
+            modes_sufficient.append('visual')
+        if OCR_GENERATED:
+            # these states will be true for any static content,  which we know
+            # is guaranteed for OCR generated texts.
+            hazards = [
+                'noFlashingHazard',
+                'noMotionSimulationHazard',
+                'noSoundHazard',
+            ]
+            controls = [
+                'fullKeyboardControl',
+                'fullMouseControl',
+                'fullSwitchControl',
+                'fullTouchControl',
+                'fullVoiceControl',
+            ]
+
+        if summary:
+            summary += 'The publication otherwise meets WCAG 2.0 Level A.'
+        else:
+            summary = 'The publication meets WCAG 2.0 Level A.'
+
+        # Add the metadata to the publication
+        self.book.add_metadata(
+            None,
+            'meta',
+            summary,
+            OrderedDict([('property', 'schema:accessibilitySummary')])
+        )
+        for feature in features:
+            self.book.add_metadata(
+                None,
+                'meta',
+                feature,
+                OrderedDict([('property', 'schema:accessibilityFeature')])
+            )
+        for mode in modes:
+            self.book.add_metadata(
+                None,
+                'meta',
+                mode,
+                OrderedDict([('property', 'schema:accessMode')])
+            )
+        for mode_sufficient in modes_sufficient:
+            self.book.add_metadata(
+                None,
+                'meta',
+                mode_sufficient,
+                OrderedDict([('property', 'schema:accessModeSufficient')])
+            )
+        if hazards:
+            for hazard in hazards:
+                self.book.add_metadata(
+                    None,
+                    'meta',
+                    hazard,
+                    OrderedDict([('property', 'schema:accessibilityHazard')])
+                )
+        if controls:
+            for control in controls:
+                self.book.add_metadata(
+                    None,
+                    'meta',
+                    control,
+                    OrderedDict([('property', 'schema:accessibilityControl')])
+                )
 
     def extract_images(self):
         """
@@ -261,6 +374,9 @@ class Ebook(object):
         if 'publisher' in self.metadata:
             for publisher in self.metadata['publisher']:
                 self.book.add_metadata('DC', 'publisher', publisher)
+
+        # set the accessibility metadata
+        self.create_accessibility_metadata()
 
         # Navigation for EPUB 3 & EPUB 2 fallback
         self.book.toc = self.chapters
