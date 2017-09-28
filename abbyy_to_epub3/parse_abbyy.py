@@ -156,9 +156,17 @@ class AbbyyParser(object):
                             level = self.paragraphs[para_id]['roleLevel']
                             # shortcut so we need fewer lookups later
                             block_dict['heading'] = level
-                            block_dict['text'] = text
+                            block_dict['text'] = text.replace(
+                                '>', '&gt;'
+                            ).replace(
+                                '<', '&lt;'
+                            )
                         else:
-                            block_dict['text'] = text
+                            block_dict['text'] = text.replace(
+                                '>', '&gt;'
+                            ).replace(
+                                '<', '&lt;'
+                            )
 
                         self.blocks.append(block_dict)
                         block_dict = {'page_no': page_no}
