@@ -33,6 +33,15 @@ def gettext(elem):
     return text
 
 
+def sanitize_xml(text):
+    """ Removes forbidden entities from any XML string """
+    text = text.replace("&", "&amp;")
+    text = text.replace("<", "&lt;")
+    text = text.replace(">", "&gt;")
+    text = text.replace("\"", "&quot;")
+    return text
+
+
 class AbbyyParser(object):
     """
     The ABBYY parser object.
@@ -156,17 +165,9 @@ class AbbyyParser(object):
                             level = self.paragraphs[para_id]['roleLevel']
                             # shortcut so we need fewer lookups later
                             block_dict['heading'] = level
-                            block_dict['text'] = text.replace(
-                                '>', '&gt;'
-                            ).replace(
-                                '<', '&lt;'
-                            )
+                            block_dict['text'] = sanitize_xml(text)
                         else:
-                            block_dict['text'] = text.replace(
-                                '>', '&gt;'
-                            ).replace(
-                                '<', '&lt;'
-                            )
+                            block_dict['text'] = sanitize_xml(text)
 
                         self.blocks.append(block_dict)
                         block_dict = {'page_no': page_no}
