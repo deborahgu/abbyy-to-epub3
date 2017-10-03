@@ -8,6 +8,9 @@ XML as well.
 ## Features
 1. Unicode-compliant
 1. Can handle left-to-right and right-to-left text.
+1. Attempts to recognize running headers, footers, and decimal or page numbers.
+Level of confidence in fuzzy matching can be fine tuned in `config.ini`.
+Errs on the side of minimizing false positives.
 
 ## Limitations
 1. Accessibility is inherently limited by the input ABBY FineReader documents. If
