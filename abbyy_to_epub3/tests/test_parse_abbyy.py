@@ -3,7 +3,7 @@
 from ebooklib import epub
 import pytest
 
-from abbyy_to_epub3.parse_abbyy import AbbyyParser
+from abbyy_to_epub3.parse_abbyy import AbbyyParser, sanitize_xml
 from abbyy_to_epub3 import constants
 
 
@@ -61,3 +61,12 @@ class TestAbbyyParser(object):
         parser.parse_metadata()
 
         assert title in self.metadata['title-alt-script']
+
+    def test_sanitize(self):
+        """ Clean illegal characters out of XML text entities. """
+        text = 'http://haxxor/evil.html?u=<img%20src="aaa"%20onerror=alert(1)>'
+        good = 'http://haxxor/evil.html?u=&lt;img%20src=&quot;aaa&quot;%20onerror=alert(1)&gt;'
+
+        result = sanitize_xml(text)
+
+        assert result == good

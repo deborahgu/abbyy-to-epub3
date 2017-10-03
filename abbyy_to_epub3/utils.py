@@ -12,28 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from setuptools import setup
 
-setup(
-    name="abbyy_to_epub3",
-    version='0.1',
-    classifiers=[
-        "Programming Language :: Python",
-    ],
-    author='Internet Archive',
-    packages=['abbyy_to_epub3'],
-    license='Apache',
-    zip_safe=False,
-
-    install_requires=[
-        'ebooklib',
-        'epubcheck',
-        'fuzzywuzzy',
-        'lxml',
-        'Pillow',
-        'pytest',
-        'numeral',
-    ],
-
-    scripts=['abbyy_to_epub3/bin/create_epub.py'],
-)
+def is_increasing(l):
+    """
+    Given a list, return True if the list elements are monotonically
+    increasing, and False otherwise.
+    """
+    for a, b in zip(l, l[1:]):
+        if a >= b:
+            return False
+    return True

@@ -14,6 +14,8 @@
 
 from collections import OrderedDict
 from ebooklib import epub
+from fuzzywuzzy import fuzz
+from numeral import roman2int
 from PIL import Image
 from pkg_resources import Requirement, resource_filename
 
@@ -23,10 +25,12 @@ import configparser
 import gzip
 import logging
 import os
+import re
 import sys
 import tempfile
 
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
+from abbyy_to_epub3.utils import is_increasing
 
 
 # Set up logging and check configuration
@@ -51,7 +55,10 @@ class Ebook(object):
     cover_img = ''    # the name of the cover image
     chapters = []     # holds each of the chapter (EpubHtml) objects
     progression = ''  # page direction
-    pagelist = ''     # holds tthe page-list item
+    pagelist = ''     # holds the page-list item
+    firsts = {}       # all first lines per-page
+    lasts = {}        # all last lines per-page
+    headers_present = False     # are there headers, foot, or page numbers?
 
     book = epub.EpubBook()  # the book itself
 
@@ -215,6 +222,153 @@ class Ebook(object):
 
         return chapter
 
+    def identify_headers_footers_pagenos(self, placement):
+        """
+        Attempts to identify the presence of headers, footers, or page numbers
+
+        1. Build a dict of first & last lines, indexed by page number.
+        2. Try to identify headers and footers.
+
+        Headers and footers can appear on every page, or on alternating pages
+        (for example if one page has header of the title, the facing page
+        might have the header of the chapter name).
+
+        They may include a page number, or the page number might be a
+        standalone header or footer.
+
+        The presence of headers and footers in the document does not mean they
+        appear on every page (for example, chapter openings or illustrated
+        pages sometimes don't contain the header/footer, or contain a modified
+        version, such as a standalone page number).
+
+        Page numbers may be in Arabic or Roman numerals.
+
+        This method does not attempt to look for all edge cases. For example,
+        it will not find:
+        - constantly varied headers, as in a dictionary
+        - page numbers that don't steadily increase
+        - page numbers that were misidentified in the OCR process, eg. IO2
+        - page numbers that have characters around them, eg. '* 45 *'
+        """
+
+        # running this on first lines or last lines?
+        if placement == 'first':
+            mylines = self.firsts
+        else:
+            mylines = self.lasts
+
+        # Look for standalone strings of digits
+        digits = re.compile(r'^\d+$')
+        romans = re.compile(r'^[xicmlvd]+$')
+        candidate_digits = []
+        candidate_romans = []
+        for block in self.blocks:
+            if placement in block:
+                line = block['text']
+                ourpageno = block['page_no']
+                mylines[ourpageno] = {'text': block['text']}
+                pageno = digits.search(line)
+                rpageno = romans.search(line, re.IGNORECASE)
+                if rpageno:
+                    # Is this a roman numeral?
+                    try:
+                        # The numeral.roman2int method is very permissive
+                        # for archaic numeral forms, which is good.
+                        num = roman2int(line)
+                    except ValueError:
+                        # not a roman numeral
+                        pass
+                    mylines[ourpageno]['ocr_roman'] = num
+                    candidate_romans.append(num)
+                elif pageno:
+                    mylines[ourpageno]['ocr_digits'] = int(line)
+                    candidate_digits.append(int(line))
+
+        # The algorithms to find false positives in page number candidates
+        if candidate_digits and is_increasing(candidate_digits):
+            self.pagenums_found = True
+            logger.debug("Page #s found: {}".format(candidate_digits))
+        else:
+            self.pagenums_found = False
+        if candidate_romans and is_increasing(candidate_romans):
+            self.rpagenums_found = True
+            logger.debug("Roman page #s found: {}".format(candidate_romans))
+        else:
+            self.rpagenums_found = False
+
+        # identify match ratio
+        fuzz_consecutive = 0
+        fuzz_alternating = 0
+        for k, v in mylines.items():
+            # Check to see if there's still one page forward
+            if k + 1 in mylines:
+                ratio_consecutive = fuzz.ratio(v['text'], mylines[k + 1]['text'])
+                mylines[k]['ratio_consecutive'] = ratio_consecutive
+                fuzz_consecutive += ratio_consecutive
+            # Check to see if there's still two pages forward
+            if k + 2 in mylines:
+                ratio_alternating = fuzz.ratio(v['text'], mylines[k + 2]['text'])
+                mylines[k]['ratio_alternating'] = ratio_alternating
+                fuzz_alternating += ratio_alternating
+
+        # occasional similar first/last lines might happen in all texts,
+        # so only identify headers & footers if there are many of them
+        HEADERS_PRESENT_THRESHOLD = int(
+            config.get('Main', 'HEADERS_PRESENT_THRESHOLD')
+        )
+        average_consecutive = fuzz_consecutive / (len(mylines) - 1)
+        average_alternating = fuzz_alternating / (len(mylines) - 2)
+        if average_consecutive > HEADERS_PRESENT_THRESHOLD:
+            if placement == 'first':
+                self.headers_present = 'consecutive'
+            else:
+                self.footers_present = 'consecutive'
+            logger.debug("{} repeated, consecutive pages".format(placement))
+        elif average_alternating > HEADERS_PRESENT_THRESHOLD:
+            if placement == 'first':
+                self.headers_present = 'alternating'
+            else:
+                self.footers_present = 'alternating'
+            logger.debug("{} repeated, alternating pages".format(placement))
+
+    def is_header_footer(self, block, placement):
+        """
+        Given a block and our identified text structure, return True if this
+        block's text is a header, footer, or page number to be ignored, False
+        otherwise.
+        """
+        THRESHOLD = int(
+            config.get('Main', 'FUZZY_HEADER_THRESHOLD')
+        )
+
+        # running this on first lines or last lines?
+        if placement == 'first':
+            mylines = self.firsts
+        else:
+            mylines = self.lasts
+
+        ourpageno = block['page_no']
+        if ourpageno in mylines:
+            if self.rpagenums_found and 'ocr_roman' in mylines[ourpageno]:
+                # This is an identified roman numeral page number
+                return True
+            if self.pagenums_found and 'ocr_digits' in mylines[ourpageno]:
+                # This is an identified page number
+                return True
+            if (
+                self.headers_present == 'consecutive' and
+                'ratio_consecutive' in mylines[ourpageno] and
+                mylines[ourpageno]['ratio_consecutive'] >= THRESHOLD
+            ):
+                return True
+            if (
+                self.headers_present == 'alternating' and
+                'ratio_alternating' in mylines[ourpageno] and
+                mylines[ourpageno]['ratio_alternating'] >= THRESHOLD
+            ):
+                return True
+        return False
+
     def craft_html(self):
         """
         Assembles the XHTML content.
@@ -236,30 +390,53 @@ class Ebook(object):
         pagelist_html = '<nav epub:type="page-list" hidden="">'
         pagelist_html += '<h1>List of Pages</h1>'
         pagelist_html += '<ol>'
+        blocks_index = -1
+
+        # Look for headers and page numbers
+        self.identify_headers_footers_pagenos('first')
+        self.identify_headers_footers_pagenos('last')
 
         # Make the initial chapter stub
         chapter = self.make_chapter(heading, chapter_no)
 
         for block in self.blocks:
+            blocks_index += 1
+
             if 'type' not in block:
                 continue
             if block['type'] == 'Text':
+                text = block['text']
+                if 'first' in block:
+                    # Look for headers and page numbers
+                    # The presence of headers or page numbers is not enough
+                    # to guarantee that the first line on the page should be
+                    # thrown away.
+                    if self.is_header_footer(block, 'first'):
+                        logger.debug("Ignoring header/#: {}".format(block['text']))
+                        continue
+                if 'last' in block:
+                    # Look for footers and page numbers
+                    # The presence of footers or page numbers is not enough
+                    # to guarantee that the last line on the page should be
+                    # thrown away.
+                    if self.is_header_footer(block, 'last'):
+                        logger.debug("Ignoring footer/#: {}".format(block['text']))
+                        continue
                 if 'heading' not in block:
                     # Regular text block. Add its heading to the chapter content.
-                    chapter.content += u'<p>{}</p>'.format(block['text'])
+                    chapter.content += u'<p>{}</p>'.format(text)
                 elif int(block['heading']) > 1:
                     # Heading >1. Format as heading but don't make new chapter.
                     chapter.content += u'<h{level}>{text}</h{level}>'.format(
-                        level=block['heading'], text=block['text']
+                        level=block['heading'], text=text
                     )
                 else:
                     # Heading 1. Begin the new chapter
                     chapter_no += 1
-                    chapter = self.make_chapter(heading, chapter_no)
+                    chapter = self.make_chapter(text, chapter_no)
 
-                    heading = block['text']
                     chapter.content = u'<h{level}>{text}</h{level}>'.format(
-                        level=block['heading'], text=heading
+                        level=block['heading'], text=text
                     )
             elif block['type'] == 'Page':
                 chapter.add_pageref(str(block['text']))
@@ -316,6 +493,7 @@ class Ebook(object):
             else:
                 logger.debug("Ignoring Block:\n Type: {}\n Attribs: {}".format(
                     block['type'], block['style']))
+
 
     def craft_epub(self):
         """ Assemble the extracted metadata & text into an EPUB  """

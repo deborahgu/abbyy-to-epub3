@@ -38,8 +38,22 @@ def sanitize_xml(text):
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")
     text = text.replace(">", "&gt;")
-    text = text.replace("\"", "&quot;")
+    text = text.replace('"', "&quot;")
+    text = text.replace("'", "&apos;")
     return text
+
+
+def add_last_text(blocks, page):
+    """
+    Given a list of blocks and the page number of the last page in the list,
+    mark up the last text block for that page in the list, if it exists.
+    """
+    elem = blocks[-1]
+    if elem['page_no'] == page:
+        if 'type' in elem and elem['type'] == 'text':
+            elem['last'] = True
+        elif len(blocks) > 1:
+            add_last_text(blocks[:-1], page)
 
 
 class AbbyyParser(object):
@@ -106,7 +120,6 @@ class AbbyyParser(object):
             return False
 
     def parse_abbyy(self):
-
         """ read the ABBYY file into an lxml etree """
         self.tree = etree.parse(self.document)
 
@@ -148,6 +161,9 @@ class AbbyyParser(object):
             if not block_per_page:
                 page_no += 1
                 continue
+
+            newpage = True
+
             for block in block_per_page:
                 if self.is_text_block(block):
                     paras = block.findall(".//a:par", namespaces=self.nsm)
@@ -156,7 +172,13 @@ class AbbyyParser(object):
                     for para in paras:
                         para_id = para.get("style")
                         text = gettext(para).strip()
+                        if not text:
+                            # Ignore whitespace-only pars
+                            continue
                         block_dict['type'] = 'Text'
+                        if newpage:
+                            block_dict['first'] = True
+                            newpage = False
                         if (
                             # FR6 docs have no structure, styles, roles
                             self.version == "FR10" and
@@ -182,6 +204,9 @@ class AbbyyParser(object):
 
             # Add the block to our list
             self.blocks.append(block_dict)
+
+            # Mark up the last text block on the page, if there is one
+            add_last_text(self.blocks, page_no)
 
             # For accessibility, create a page number at the end of every page
             if self.PAGES_SUPPORT:
