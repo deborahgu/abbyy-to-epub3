@@ -5,3 +5,5 @@ lxml==3.8.0
 pillow==4.2.1
 pytest==3.2.2
 numeral==0.1.0.11
+sphinx
+sphinx-autobuild

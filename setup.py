@@ -33,6 +33,8 @@ setup(
         'Pillow',
         'pytest',
         'numeral',
+        'sphinx',
+        'sphinx-autobuild',
     ],
 
     scripts=['abbyy_to_epub3/bin/create_epub.py'],
