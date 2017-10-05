@@ -54,7 +54,7 @@ class Ebook(object):
     cover_img = ''    # the name of the cover image
     chapters = []     # holds each of the chapter (EpubHtml) objects
     progression = ''  # page direction
-    pagelist = ''     # holds the page-list item
+    #pagelist = ''     # holds the page-list item
     firsts = {}       # all first lines per-page
     lasts = {}        # all last lines per-page
     # are there headers, footers, or page numbers?
@@ -73,6 +73,7 @@ class Ebook(object):
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
+        self.debug = debug
         self.base = base
         self.tmpdir = tempfile.TemporaryDirectory()
         self.cover_img = '{}/cover.png'.format(self.tmpdir.name)
@@ -324,28 +325,29 @@ class Ebook(object):
         HEADERS_PRESENT_THRESHOLD = int(
             config.get('Main', 'HEADERS_PRESENT_THRESHOLD')
         )
-        average_consecutive = fuzz_consecutive / (len(mylines) - 1)
-        average_alternating = fuzz_alternating / (len(mylines) - 2)
-        self.logger.debug("{}: consecutive fuzz avg.: {}".format(
-            placement,
-            average_consecutive
-        ))
-        self.logger.debug("{}: alternating fuzz avg.: {}".format(
-            placement,
-            average_alternating
-        ))
-        if average_consecutive > HEADERS_PRESENT_THRESHOLD:
-            if placement == 'first':
-                self.headers_present = 'consecutive'
-            else:
-                self.footers_present = 'consecutive'
-            self.logger.debug("{} repeated, consecutive pages".format(placement))
-        elif average_alternating > HEADERS_PRESENT_THRESHOLD:
-            if placement == 'first':
-                self.headers_present = 'alternating'
-            else:
-                self.footers_present = 'alternating'
-            self.logger.debug("{} repeated, alternating pages".format(placement))
+        if len(mylines) > 2:
+            average_consecutive = fuzz_consecutive / (len(mylines) - 1)
+            average_alternating = fuzz_alternating / (len(mylines) - 2)
+            self.logger.debug("{}: consecutive fuzz avg.: {}".format(
+                placement,
+                average_consecutive
+            ))
+            self.logger.debug("{}: alternating fuzz avg.: {}".format(
+                placement,
+                average_alternating
+            ))
+            if average_consecutive > HEADERS_PRESENT_THRESHOLD:
+                if placement == 'first':
+                    self.headers_present = 'consecutive'
+                else:
+                    self.footers_present = 'consecutive'
+                self.logger.debug("{} repeated, consecutive pages".format(placement))
+            elif average_alternating > HEADERS_PRESENT_THRESHOLD:
+                if placement == 'first':
+                    self.headers_present = 'alternating'
+                else:
+                    self.footers_present = 'alternating'
+                self.logger.debug("{} repeated, alternating pages".format(placement))
 
     def is_header_footer(self, block, placement):
         """
@@ -378,6 +380,7 @@ class Ebook(object):
                 mylines[ourpageno]['ocr_digits'] == placement
             ):
                 # This is an identified page number
+                self.logger.debug("identified page number: {}".format(block['text']))
                 return True
             if (
                 self.headers_present == 'consecutive' and
@@ -425,14 +428,15 @@ class Ebook(object):
         heading = "Cover"
         chapter_no = 1
         picnum = 1
-        pagelist_html = '<nav epub:type="page-list" hidden="">'
-        pagelist_html += '<h1>List of Pages</h1>'
-        pagelist_html += '<ol>'
+        #pagelist_html = '<nav epub:type="page-list" hidden="">'
+        #pagelist_html += '<h1>List of Pages</h1>'
+        #pagelist_html += '<ol>'
         blocks_index = -1
 
-        # Look for headers and page numbers
-        self.identify_headers_footers_pagenos('first')
-        self.identify_headers_footers_pagenos('last')
+        # Look for headers and page numbers in FR6 documents (FR10 has markup)
+        if self.version == "FR6":
+            self.identify_headers_footers_pagenos('first')
+            self.identify_headers_footers_pagenos('last')
 
         # Make the initial chapter stub
         chapter = self.make_chapter(heading, chapter_no)
@@ -444,38 +448,73 @@ class Ebook(object):
                 continue
             if block['type'] == 'Text':
                 text = block['text']
+                role = block['role']
+
+                # This is the first text element on the page
                 if 'first' in block:
+                    # reset any footnote references
+                    noteref = 1
+
                     # Look for headers and page numbers
-                    # The presence of headers or page numbers is not enough
-                    # to guarantee that the first line on the page should be
-                    # thrown away.
-                    if self.is_header_footer(block, 'first'):
+                    if (
+                        self.version == "FR6" and
+                        self.is_header_footer(block, 'first')
+                    ):
+                        self.logger.debug("Stripping header {}".format(text))
                         continue
-                if 'last' in block:
-                    # Look for footers and page numbers
-                    # The presence of footers or page numbers is not enough
-                    # to guarantee that the last line on the page should be
-                    # thrown away.
-                    if self.is_header_footer(block, 'last'):
+
+                # Look for footers and page numbers
+                if (
+                    'last' in block and
+                    self.is_header_footer(block, 'last')
+                ):
+                        self.logger.debug("Stripping footer {}".format(text))
                         continue
-                if 'heading' not in block:
-                    # Regular text block. Add its heading to the chapter content.
+                if role == 'footnote':
+                    # footnote. Our ABBYY markup doesn't indicate references,
+                    # so fake some right above the footnote content so they'll
+                    # be reachable by all adaptive tech and user agents.
+                    self.clear_elements(chapter.content)
+                    chapter.content += u'<p><a epub:type="noteref" href="#n{ref}">{ref}</a></p>'.format(
+                        ref=noteref,
+                    )
+                    chapter.content += u'<aside epub:type="footnote" id="n{ref}">{text}</aside>'.format(
+                        ref=noteref,
+                        text=text,
+                    )
+                    noteref += 1
+                elif role == 'tableCaption':
+                    # It would be ideal to mark up table captions as <caption>
+                    # within the associated table.  However, the ABBYY markup
+                    # doesn't have a way to associate the caption with the
+                    # specific table, and there's no way of knowing if the
+                    # caption is for a table immediately following or
+                    # immediately prior. Add a little styling to make it more
+                    # obvious, and some accessibility helpers.
+                    self.clear_elements(chapter.content)
+                    chapter.content += u'<p class="strong"><span class="sr-only">Table caption</span>{}</p>'.format(text)
+                elif role == 'heading':
+                    if int(block['heading']) > 1:
+                        # Heading >1. Format as heading but don't make new chapter.
+                        self.clear_elements(chapter.content)
+                        chapter.content += u'<h{level}>{text}</h{level}>'.format(
+                            level=block['heading'], text=text
+                        )
+                    else:
+                        # Heading 1. Begin the new chapter
+                        chapter_no += 1
+                        chapter = self.make_chapter(text, chapter_no)
+                        chapter.content = u'<h{level}>{text}</h{level}>'.format(
+                            level=block['heading'], text=text
+                        )
+                else:
+                    # Regular or other text block. Add its heading to the
+                    # chapter content. In theory a table of contents could get
+                    # parsed for page numbers and turned into a hyperlinked
+                    # nav toc pointing to page elements, but relying on headers
+                    # is probably more reliable.
                     self.clear_elements(chapter.content)
                     chapter.content += u'<p>{}</p>'.format(text)
-                elif int(block['heading']) > 1:
-                    # Heading >1. Format as heading but don't make new chapter.
-                    self.clear_elements(chapter.content)
-                    chapter.content += u'<h{level}>{text}</h{level}>'.format(
-                        level=block['heading'], text=text
-                    )
-                else:
-                    # Heading 1. Begin the new chapter
-                    chapter_no += 1
-                    chapter = self.make_chapter(text, chapter_no)
-
-                    chapter.content = u'<h{level}>{text}</h{level}>'.format(
-                        level=block['heading'], text=text
-                    )
             elif block['type'] == 'Page':
                 chapter.add_pageref(str(block['text']))
             elif block['type'] == 'Picture':
@@ -570,7 +609,8 @@ class Ebook(object):
             metadata_file,
             self.metadata,
             self.paragraphs,
-            self.blocks
+            self.blocks,
+            debug=self.debug,
         )
         parser.parse_abbyy()
 
@@ -584,6 +624,10 @@ class Ebook(object):
         else:
             self.progression = 'default'
         self.book.set_direction(self.progression)
+
+        # get the finereader version
+        if 'fr-version' in self.metadata:
+            self.version = self.metadata['fr-version']
 
         # make the HTML chapters
         self.craft_html()
@@ -616,7 +660,19 @@ class Ebook(object):
         self.book.spine = ['nav'] + self.chapters
 
         # define CSS style
-        style = '.center {text-align: center}'
+        style = """.center {text-align: center}
+                .sr-only {
+                    position: absolute;
+                    width: 1px;
+                    height: 1px;
+                    padding: 0;
+                    margin: -1px;
+                    overflow: hidden;
+                    clip: rect(0,0,0,0);
+                    border: 0;
+                }
+                .strong {font-weight: bold;}
+                """
         nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
         self.book.add_item(nav_css)
 

@@ -21,9 +21,6 @@ import sys
 from abbyy_to_epub3 import constants
 
 
-logger = logging.getLogger(__name__)
-
-
 def gettext(elem):
     text = elem.text or ""
     for e in elem:
@@ -62,21 +59,35 @@ class AbbyyParser(object):
     Parses ABBYY metadata in preparation for import into an EPUB 3 document.
 
     Here are the components of the ABBYY schema we use:
+
+    .. code:: html
+
     <page>
         <block>: types Picture, Separator, Table, or Text
             Text:
             <region>
-            <text> contains a '\n' as a text element
+            <text> contains a '\\n' as a text element
                <par>: The paragraph, repeatable
                 <line>: The line, repeatable
                     <formatting>
                        <charParams>: The individual character
-            Image:
-            Separator:
-            Table:
 
-            Each paragraph has identifier, which has a unique style, including
-               the paragraph's role, eg:
+    Image:
+    Separator:
+    Table:
+
+    .. code:: html
+
+            <row>
+              <cell>
+                <text>
+                  <par>
+
+    Each paragraph has an identifier, which has a unique style, including
+    the paragraph's role, eg:
+
+    .. code:: html
+
                 <paragraphStyle
                     id="{000000DD-016F-0A36-032F-EEBBD9B8571E}"
                     name="Heading #1|1"
@@ -88,6 +99,21 @@ class AbbyyParser(object):
                     rightIndent="0" lineSpacing="1790" fixedLineSpacing="1">
                <par align="Right" lineSpacing="1790"
                     style="{000000DD-016F-0A36-032F-EEBBD9B8571E}">
+
+    The roles map as follows:
+
+    =================   ==============
+    Role name           role
+    =================   ==============
+    Body text   		text
+    Footnote    		footnote
+    Header or footer	rt
+    Heading     		heading
+    Other	        	other
+    Table caption		tableCaption
+    Table of contents	contents
+    =================   ==============
+
     """
 
     # Set these once we start parsing the tree and know our schema
@@ -96,7 +122,12 @@ class AbbyyParser(object):
     version = ''
     etree = ''
 
-    def __init__(self, document, metadata_file, metadata, paragraphs, blocks):
+    def __init__(self, document, metadata_file, metadata, paragraphs, blocks, debug=False):
+        self.logger = logging.getLogger(__name__)
+        if debug:
+            self.logger.addHandler(logging.StreamHandler())
+            self.logger.setLevel(logging.DEBUG)
+
         self.document = document
         self.metadata_file = metadata_file
         self.metadata = metadata
@@ -135,7 +166,8 @@ class AbbyyParser(object):
             self.version = "FR6"
         else:
             raise RuntimeError("Input XML document is not a supported schema.")
-        logger.debug("Version {}".format(self.version))
+        self.logger.debug("Version {}".format(self.version))
+        self.metadata['fr-version'] = self.version
 
         self.parse_metadata()
         self.parse_paragraph_styles()
@@ -170,24 +202,40 @@ class AbbyyParser(object):
                     # Some blocks can have multiple styles in them. We'll treat
                     # those as multiple blocks.
                     for para in paras:
+                        # Get the paragraph style and text
                         para_id = para.get("style")
                         text = gettext(para).strip()
+
+                        # Ignore whitespace-only pars
                         if not text:
-                            # Ignore whitespace-only pars
                             continue
+
+                        # Get the paragraph role
+                        # FR6 docs have no structure, styles, roles
+                        if self.version == "FR10":
+                            role = self.paragraphs[para_id]['role']
+                        else:
+                            role = "FR6"
+
+                        # Skip headers and footers
+                        if role == 'rt':
+                            continue
+
+                        # This is a good text chunk. Instantiate the block.
                         d = {
                             'type': 'Text',
                             'page_no': page_no,
                             'text': sanitize_xml(text),
+                            'role': role,
                         }
+
+                        # To help with unmarked header recognition
                         if newpage:
                             d['first'] = True
                             newpage = False
-                        if (
-                            # FR6 docs have no structure, styles, roles
-                            self.version == "FR10" and
-                            self.paragraphs[para_id]['role'] == "heading"
-                           ):
+
+                        # Mark up heading level
+                        if role == 'heading':
                             level = self.paragraphs[para_id]['roleLevel']
                             # shortcut so we need fewer lookups later
                             d['heading'] = level
@@ -195,6 +243,7 @@ class AbbyyParser(object):
                         # Whenever you append to the list, re-instantiate
                         self.blocks.append(d)
                         d = dict()
+
                 elif self.is_block_type(block, "Table"):
                     d = {
                         'type': 'Table',
@@ -252,7 +301,9 @@ class AbbyyParser(object):
                     d = dict()
 
             # Mark up the last text block on the page, if there is one
-            add_last_text(self.blocks, page_no)
+            # This is only needed for FR6
+            if self.version == "FR6":
+                add_last_text(self.blocks, page_no)
 
             # For accessibility, create a page number at the end of every page
             if self.PAGES_SUPPORT:

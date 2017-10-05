@@ -12,8 +12,7 @@ Welcome to abbyy_to_epub3's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   includes
-
+   modules
 
 
 Indices and tables
