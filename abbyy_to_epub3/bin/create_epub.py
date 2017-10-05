@@ -12,18 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abbyy_to_epub3 import create_epub
-import sys
+import argparse
+import logging
 
-docname = sys.argv[1]
+from abbyy_to_epub3 import create_epub
+
+logger = logging.getLogger(__name__)
+
 usage = (
-    "Usage: python create_epub.py [docname], where [docname] is a directory "
-    "containing all the necessary files.\n"
+    "A directory containing all the necessary files.\n"
     "See the README at https://github.com/deborahgu/abbyy-to-epub3 for details."
 )
 
-if docname:
-    book = create_epub.Ebook(docname)  # See *Assumptions* below.
+parser = argparse.ArgumentParser(
+    description='Process an ABBYY file into an EPUB'
+)
+parser.add_argument(
+    '-d',
+    '--debug',
+    action='store_true',
+    help='Show debugging information',
+)
+parser.add_argument('docname', help=usage)
+args = parser.parse_args()
+
+if args is not None:
+    debug = args.debug
+    if debug:
+        logger.addHandler(logging.StreamHandler())
+        logger.setLevel(logging.DEBUG)
+    docname = args.docname
+    book = create_epub.Ebook(docname, debug=debug)
     book.craft_epub()
-else:
-    print(usage)

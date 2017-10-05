@@ -33,8 +33,7 @@ from abbyy_to_epub3.parse_abbyy import AbbyyParser
 from abbyy_to_epub3.utils import is_increasing
 
 
-# Set up logging and check configuration
-logger = logging.getLogger(__name__)
+# Set up configuration
 config = configparser.ConfigParser()
 configfile = resource_filename(Requirement.parse("abbyy_to_epub3"), "config.ini")
 config.read(configfile)
@@ -58,18 +57,29 @@ class Ebook(object):
     pagelist = ''     # holds the page-list item
     firsts = {}       # all first lines per-page
     lasts = {}        # all last lines per-page
-    headers_present = False     # are there headers, foot, or page numbers?
+    # are there headers, footers, or page numbers?
+    headers_present = False
+    pagenums_found = False
+    rpagenums_found = False
+    table = False
+    table_row = False
+    table_cell = False
 
     book = epub.EpubBook()  # the book itself
 
-    def __init__(self, base):
+    def __init__(self, base, debug=False):
+        self.logger = logging.getLogger(__name__)
+        if debug:
+            self.logger.addHandler(logging.StreamHandler())
+            self.logger.setLevel(logging.DEBUG)
+
         self.base = base
         self.tmpdir = tempfile.TemporaryDirectory()
         self.cover_img = '{}/cover.png'.format(self.tmpdir.name)
         self.abbyy_file = "{tmp}/{base}_abbyy".format(
             tmp=self.tmpdir.name, base=self.base
         )
-        logger.debug("Temp: {}\n Base: {}".format(
+        self.logger.debug("Temp directory: {}\nidentifier: {}".format(
             self.tmpdir.name, self.base))
 
     def create_accessibility_metadata(self):
@@ -197,7 +207,7 @@ class Ebook(object):
         try:
             Image.open(cover_file).save(self.cover_img)
         except IOError as e:
-            logger.warning("Cannot create cover file: {}".format(e))
+            self.logger.warning("Cannot create cover file: {}".format(e))
 
     def make_chapter(self, heading, chapter_no):
         """
@@ -278,23 +288,21 @@ class Ebook(object):
                     except ValueError:
                         # not a roman numeral
                         pass
-                    mylines[ourpageno]['ocr_roman'] = num
+                    mylines[ourpageno]['ocr_roman'] = placement
                     candidate_romans.append(num)
                 elif pageno:
-                    mylines[ourpageno]['ocr_digits'] = int(line)
+                    mylines[ourpageno]['ocr_digits'] = placement
                     candidate_digits.append(int(line))
 
         # The algorithms to find false positives in page number candidates
+        # are resource intensive, so this excludes anything where the candidate
+        # numbers aren't monotonically increasing.
         if candidate_digits and is_increasing(candidate_digits):
             self.pagenums_found = True
-            logger.debug("Page #s found: {}".format(candidate_digits))
-        else:
-            self.pagenums_found = False
+            self.logger.debug("Page #s found: {}".format(candidate_digits))
         if candidate_romans and is_increasing(candidate_romans):
             self.rpagenums_found = True
-            logger.debug("Roman page #s found: {}".format(candidate_romans))
-        else:
-            self.rpagenums_found = False
+            self.logger.debug("Roman page #s found: {}".format(candidate_romans))
 
         # identify match ratio
         fuzz_consecutive = 0
@@ -318,18 +326,26 @@ class Ebook(object):
         )
         average_consecutive = fuzz_consecutive / (len(mylines) - 1)
         average_alternating = fuzz_alternating / (len(mylines) - 2)
+        self.logger.debug("{}: consecutive fuzz avg.: {}".format(
+            placement,
+            average_consecutive
+        ))
+        self.logger.debug("{}: alternating fuzz avg.: {}".format(
+            placement,
+            average_alternating
+        ))
         if average_consecutive > HEADERS_PRESENT_THRESHOLD:
             if placement == 'first':
                 self.headers_present = 'consecutive'
             else:
                 self.footers_present = 'consecutive'
-            logger.debug("{} repeated, consecutive pages".format(placement))
+            self.logger.debug("{} repeated, consecutive pages".format(placement))
         elif average_alternating > HEADERS_PRESENT_THRESHOLD:
             if placement == 'first':
                 self.headers_present = 'alternating'
             else:
                 self.footers_present = 'alternating'
-            logger.debug("{} repeated, alternating pages".format(placement))
+            self.logger.debug("{} repeated, alternating pages".format(placement))
 
     def is_header_footer(self, block, placement):
         """
@@ -349,10 +365,18 @@ class Ebook(object):
 
         ourpageno = block['page_no']
         if ourpageno in mylines:
-            if self.rpagenums_found and 'ocr_roman' in mylines[ourpageno]:
+            if (
+                self.rpagenums_found and
+                'ocr_roman' in mylines[ourpageno] and
+                mylines[ourpageno]['ocr_roman'] == placement
+            ):
                 # This is an identified roman numeral page number
                 return True
-            if self.pagenums_found and 'ocr_digits' in mylines[ourpageno]:
+            if (
+                self.pagenums_found and
+                'ocr_digits' in mylines[ourpageno] and
+                mylines[ourpageno]['ocr_digits'] == placement
+            ):
                 # This is an identified page number
                 return True
             if (
@@ -368,6 +392,20 @@ class Ebook(object):
             ):
                 return True
         return False
+
+    def clear_elements(self, content):
+        """
+        If an HTML element was opened in an earlier block, close it now.
+        """
+        if self.table_cell:
+            content += '</td>'
+            self.table_cell = False
+        if self.table_row:
+            content += '</tr>'
+            self.table_row = False
+        if self.table:
+            content += '</table>'
+            self.table = False
 
     def craft_html(self):
         """
@@ -412,7 +450,6 @@ class Ebook(object):
                     # to guarantee that the first line on the page should be
                     # thrown away.
                     if self.is_header_footer(block, 'first'):
-                        logger.debug("Ignoring header/#: {}".format(block['text']))
                         continue
                 if 'last' in block:
                     # Look for footers and page numbers
@@ -420,13 +457,14 @@ class Ebook(object):
                     # to guarantee that the last line on the page should be
                     # thrown away.
                     if self.is_header_footer(block, 'last'):
-                        logger.debug("Ignoring footer/#: {}".format(block['text']))
                         continue
                 if 'heading' not in block:
                     # Regular text block. Add its heading to the chapter content.
+                    self.clear_elements(chapter.content)
                     chapter.content += u'<p>{}</p>'.format(text)
                 elif int(block['heading']) > 1:
                     # Heading >1. Format as heading but don't make new chapter.
+                    self.clear_elements(chapter.content)
                     chapter.content += u'<h{level}>{text}</h{level}>'.format(
                         level=block['heading'], text=text
                     )
@@ -465,11 +503,11 @@ class Ebook(object):
                 try:
                     i = Image.open(origfile)
                 except IOError as e:
-                    logger.warning("Can't open image {}: {}".format(origfile, e))
+                    self.logger.warning("Can't open image {}: {}".format(origfile, e))
                 try:
                     i.crop(box).save(pngfile)
                 except IOError as e:
-                    logger.warning("Can't crop image {} and save to {}: {}".format(
+                    self.logger.warning("Can't crop image {} and save to {}: {}".format(
                         origfile, pngfile, e
                     ))
                 epubimage = epub.EpubImage()
@@ -478,6 +516,7 @@ class Ebook(object):
                     epubimage.content = f.read()
                 epubimage = self.book.add_item(epubimage)
 
+                self.clear_elements(chapter.content)
                 chapter.content += u'<img src="{src}" alt="Picture #{picnum}" width="{w}" height={h}>'.format(
                     src=in_epub_imagefile,
                     picnum=picnum,
@@ -486,14 +525,28 @@ class Ebook(object):
 
                 # increment the image number
                 picnum += 1
-            elif block['type'] in ('Separator' or 'SeparatorsBox'):
+            elif block['type'] == 'Separator' or block['type'] == 'SeparatorsBox':
                 # Separator blocks seem to be fairly randomly applied and don't
                 # correspond to anything useful in the original content
                 pass
+            elif block['type'] == 'Table':
+                self.clear_elements(chapter.content)
+                chapter.content += u'<table>'
+                self.table = True
+            elif block['type'] == 'TableRow':
+                self.clear_elements(chapter.content)
+                chapter.content += u'<tr>'
+                self.table_row = True
+            elif block['type'] == 'TableCell':
+                self.clear_elements(chapter.content)
+                chapter.content += u'<td>'
+                self.table_cell = True
+            elif block['type'] == 'TableText':
+                self.clear_elements(chapter.content)
+                chapter.content += u'<p>{}</p>'.format(block['text'])
             else:
-                logger.debug("Ignoring Block:\n Type: {}\n Attribs: {}".format(
+                self.logger.debug("Ignoring Block:\n Type: {}\n Attribs: {}".format(
                     block['type'], block['style']))
-
 
     def craft_epub(self):
         """ Assemble the extracted metadata & text into an EPUB  """

@@ -109,11 +109,11 @@ class AbbyyParser(object):
         else:
             self.PAGES_SUPPORT = False
 
-    def is_text_block(self, elem):
+    def is_block_type(self, elem, blocktype):
         """ Identifies if an XML element is a textblock. """
         if (
             elem.tag == "{{{}}}block".format(self.ns) and
-            elem.get("blockType") == "Text"
+            elem.get("blockType") == blocktype
            ):
             return True
         else:
@@ -151,7 +151,7 @@ class AbbyyParser(object):
     def parse_content(self):
         """ Parse each page of the book.  """
         page_no = 1
-        block_dict = {'page_no': page_no}
+        d = {'page_no': page_no}
 
         pages = self.tree.findall(".//a:page", namespaces=self.nsm)
 
@@ -165,7 +165,7 @@ class AbbyyParser(object):
             newpage = True
 
             for block in block_per_page:
-                if self.is_text_block(block):
+                if self.is_block_type(block, "Text"):
                     paras = block.findall(".//a:par", namespaces=self.nsm)
                     # Some blocks can have multiple styles in them. We'll treat
                     # those as multiple blocks.
@@ -175,9 +175,13 @@ class AbbyyParser(object):
                         if not text:
                             # Ignore whitespace-only pars
                             continue
-                        block_dict['type'] = 'Text'
+                        d = {
+                            'type': 'Text',
+                            'page_no': page_no,
+                            'text': sanitize_xml(text),
+                        }
                         if newpage:
-                            block_dict['first'] = True
+                            d['first'] = True
                             newpage = False
                         if (
                             # FR6 docs have no structure, styles, roles
@@ -186,39 +190,81 @@ class AbbyyParser(object):
                            ):
                             level = self.paragraphs[para_id]['roleLevel']
                             # shortcut so we need fewer lookups later
-                            block_dict['heading'] = level
-                            block_dict['text'] = sanitize_xml(text)
-                        else:
-                            block_dict['text'] = sanitize_xml(text)
+                            d['heading'] = level
 
-                        self.blocks.append(block_dict)
-                        block_dict = {'page_no': page_no}
+                        # Whenever you append to the list, re-instantiate
+                        self.blocks.append(d)
+                        d = dict()
+                elif self.is_block_type(block, "Table"):
+                    d = {
+                        'type': 'Table',
+                        'style': block.attrib,
+                        'page_no': page_no,
+                    }
+                    self.blocks.append(d)
+                    d = dict()
+                    rows = block.findall(".//a:row", namespaces=self.nsm)
+                    for row in rows:
+                        d = {
+                            'type': 'TableRow',
+                            'style': block.attrib,
+                            'page_no': page_no,
+                        }
+                        self.blocks.append(d)
+                        d = dict()
+                        cells = row.findall("a:cell", namespaces=self.nsm)
+                        for cell in cells:
+                            d = {
+                                'type': 'TableCell',
+                                'style': block.attrib,
+                                'page_no': page_no,
+                            }
+                            self.blocks.append(d)
+                            d = dict()
+                            # FIXME some of this text identification code
+                            # used here and above can be generalized into a function
+                            text = cell.find("a:text", namespaces=self.nsm)
+                            paras = text.findall("a:par", namespaces=self.nsm)
+                            for para in paras:
+                                para_id = para.get("style")
+                                text = gettext(para).strip()
+                                if not text:
+                                    # Ignore whitespace-only pars
+                                    continue
+                                d = {
+                                    'type': 'TableText',
+                                    'style': block.attrib,
+                                    'page_no': page_no,
+                                    'text': sanitize_xml(text)
+                                }
+                                self.blocks.append(d)
+                                d = dict()
+                                if newpage:
+                                    newpage = False
                 else:
                     # Create an entry for non-text blocks with type & attributes
-                    block_dict['type'] = block.get("blockType")
-                    block_dict['style'] = block.attrib
-                    self.blocks.append(block_dict)
-
-                # Clean out the placeholder dict before the next loop
-                block_dict = {'page_no': page_no}
-
-            # Add the block to our list
-            self.blocks.append(block_dict)
+                    d = {
+                        'type': block.get("blockType"),
+                        'style': block.attrib,
+                        'page_no': page_no,
+                    }
+                    self.blocks.append(d)
+                    d = dict()
 
             # Mark up the last text block on the page, if there is one
             add_last_text(self.blocks, page_no)
 
             # For accessibility, create a page number at the end of every page
             if self.PAGES_SUPPORT:
-                block_dict = {
+                d = {
                     'type': 'Page',
                     'text': page_no,
                 }
-                self.blocks.append(block_dict)
+                self.blocks.append(d)
+                d = dict()
 
             # Set up the next iteration.
             page_no += 1
-            block_dict = {'page_no': page_no}
 
     def parse_metadata(self):
         """
