@@ -63,12 +63,17 @@ class AbbyyParser(object):
     .. code:: html
 
     <page>
-        <block>: types Picture, Separator, Table, or Text
-            Text:
+        <block>types Picture, Separator, Table, or Text</block>
+
+    Text:
+
+    .. code:: html
+
+    <page>
             <region>
             <text> contains a '\\n' as a text element
-               <par>: The paragraph, repeatable
-                <line>: The line, repeatable
+               <par> The paragraph, repeatable
+                <line> The line, repeatable
                     <formatting>
                        <charParams>: The individual character
 
@@ -176,9 +181,16 @@ class AbbyyParser(object):
     def parse_paragraph_styles(self):
         """ Paragraph styles are in their own elements at the start of the text """
         styles = self.tree.findall(".//a:paragraphStyle", namespaces=self.nsm)
+        fontstyles = self.tree.findall(".//a:fontStyle", namespaces=self.nsm)
         for style in styles:
             id = style.get("id")
-            self.paragraphs[id] = style.attrib
+            self.paragraphs[id] = dict(style.attrib)
+            if 'mainFontStyleId' in style.attrib:
+                for fstyle in fontstyles:
+                    font = fstyle.get("id")
+                    if font == style.attrib['mainFontStyleId']:
+                        break
+                self.paragraphs[id]['fontstyle'] = dict(fstyle.attrib)
 
     def parse_content(self):
         """ Parse each page of the book.  """
@@ -227,6 +239,7 @@ class AbbyyParser(object):
                             'page_no': page_no,
                             'text': sanitize_xml(text),
                             'role': role,
+                            'style': self.paragraphs[para_id]
                         }
 
                         # To help with unmarked header recognition

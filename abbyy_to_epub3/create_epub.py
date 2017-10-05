@@ -403,10 +403,10 @@ class Ebook(object):
         if self.table_cell:
             content += '</td>'
             self.table_cell = False
-        if self.table_row:
+        elif self.table_row:
             content += '</tr>'
             self.table_row = False
-        if self.table:
+        elif self.table:
             content += '</table>'
             self.table = False
 
@@ -449,6 +449,28 @@ class Ebook(object):
             if block['type'] == 'Text':
                 text = block['text']
                 role = block['role']
+                if (
+                    'style' in block and
+                    'fontstyle' in block['style']
+                ):
+                    fclass = ''
+                    fontstyle = block['style']['fontstyle']
+                    fsize = fontstyle['fs']
+                    if 'italic' in fontstyle:
+                        fclass += 'italic '
+                    if 'bold' in fontstyle:
+                        fclass += 'bold '
+                    if 'Serif' in fontstyle['ff'] or 'Times' in fontstyle['ff']:
+                        fclass += 'serif '
+                    elif 'Sans' in fontstyle['ff']:
+                        fclass += 'sans '
+
+                    fstyling = 'class="{fclass}" style="font-size: {fsize}pt"'.format(
+                        fclass=fclass,
+                        fsize=fsize,
+                    )
+                else:
+                    fstyling = ''
 
                 # This is the first text element on the page
                 if 'first' in block:
@@ -475,10 +497,12 @@ class Ebook(object):
                     # so fake some right above the footnote content so they'll
                     # be reachable by all adaptive tech and user agents.
                     self.clear_elements(chapter.content)
-                    chapter.content += u'<p><a epub:type="noteref" href="#n{ref}">{ref}</a></p>'.format(
+                    chapter.content += u'<p><a epub:type="noteref" href="#n{page}_{ref}">{ref}</a></p>'.format(
+                        page=block['page_no'],
                         ref=noteref,
                     )
-                    chapter.content += u'<aside epub:type="footnote" id="n{ref}">{text}</aside>'.format(
+                    chapter.content += u'<aside epub:type="footnote" id="n{page}_{ref}">{text}</aside>'.format(
+                        page=block['page_no'],
                         ref=noteref,
                         text=text,
                     )
@@ -492,7 +516,10 @@ class Ebook(object):
                     # immediately prior. Add a little styling to make it more
                     # obvious, and some accessibility helpers.
                     self.clear_elements(chapter.content)
-                    chapter.content += u'<p class="strong"><span class="sr-only">Table caption</span>{}</p>'.format(text)
+                    chapter.content += u'<p {style}><span class="sr-only">Table caption</span>{text}</p>'.format(
+                        style=fstyling,
+                        text=text,
+                    )
                 elif role == 'heading':
                     if int(block['heading']) > 1:
                         # Heading >1. Format as heading but don't make new chapter.
@@ -514,7 +541,10 @@ class Ebook(object):
                     # nav toc pointing to page elements, but relying on headers
                     # is probably more reliable.
                     self.clear_elements(chapter.content)
-                    chapter.content += u'<p>{}</p>'.format(text)
+                    chapter.content += u'<p {style}>{text}</p>'.format(
+                        style=fstyling,
+                        text=text,
+                    )
             elif block['type'] == 'Page':
                 chapter.add_pageref(str(block['text']))
             elif block['type'] == 'Picture':
@@ -581,8 +611,10 @@ class Ebook(object):
                 chapter.content += u'<td>'
                 self.table_cell = True
             elif block['type'] == 'TableText':
-                self.clear_elements(chapter.content)
-                chapter.content += u'<p>{}</p>'.format(block['text'])
+                chapter.content += u'<p {style}>{text}</p>'.format(
+                    style=fstyling,
+                    text=block['text'],
+                )
             else:
                 self.logger.debug("Ignoring Block:\n Type: {}\n Attribs: {}".format(
                     block['type'], block['style']))
@@ -672,6 +704,9 @@ class Ebook(object):
                     border: 0;
                 }
                 .strong {font-weight: bold;}
+                .italic {font-style: italic;}
+                .serif {font-family: serif;}
+                .sans {font-family: sans-serif;}
                 """
         nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
         self.book.add_item(nav_css)
