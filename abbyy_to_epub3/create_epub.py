@@ -446,31 +446,31 @@ class Ebook(object):
 
             if 'type' not in block:
                 continue
+            if (
+                'style' in block and
+                'fontstyle' in block['style']
+            ):
+                fclass = ''
+                fontstyle = block['style']['fontstyle']
+                fsize = fontstyle['fs']
+                if 'italic' in fontstyle:
+                    fclass += 'italic '
+                if 'bold' in fontstyle:
+                    fclass += 'bold '
+                if 'Serif' in fontstyle['ff'] or 'Times' in fontstyle['ff']:
+                    fclass += 'serif '
+                elif 'Sans' in fontstyle['ff']:
+                    fclass += 'sans '
+
+                fstyling = 'class="{fclass}" style="font-size: {fsize}pt"'.format(
+                    fclass=fclass,
+                    fsize=fsize,
+                )
+            else:
+                fstyling = ''
             if block['type'] == 'Text':
                 text = block['text']
                 role = block['role']
-                if (
-                    'style' in block and
-                    'fontstyle' in block['style']
-                ):
-                    fclass = ''
-                    fontstyle = block['style']['fontstyle']
-                    fsize = fontstyle['fs']
-                    if 'italic' in fontstyle:
-                        fclass += 'italic '
-                    if 'bold' in fontstyle:
-                        fclass += 'bold '
-                    if 'Serif' in fontstyle['ff'] or 'Times' in fontstyle['ff']:
-                        fclass += 'serif '
-                    elif 'Sans' in fontstyle['ff']:
-                        fclass += 'sans '
-
-                    fstyling = 'class="{fclass}" style="font-size: {fsize}pt"'.format(
-                        fclass=fclass,
-                        fsize=fsize,
-                    )
-                else:
-                    fstyling = ''
 
                 # This is the first text element on the page
                 if 'first' in block:
