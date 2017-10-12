@@ -19,6 +19,7 @@ import logging
 import sys
 
 from abbyy_to_epub3 import constants
+from abbyy_to_epub3.utils import sanitize_xml
 
 
 def gettext(elem):
@@ -27,16 +28,6 @@ def gettext(elem):
         text += gettext(e)
         if e.tail:
             text += e.tail.strip()
-    return text
-
-
-def sanitize_xml(text):
-    """ Removes forbidden entities from any XML string """
-    text = text.replace("&", "&amp;")
-    text = text.replace("<", "&lt;")
-    text = text.replace(">", "&gt;")
-    text = text.replace('"', "&quot;")
-    text = text.replace("'", "&apos;")
     return text
 
 
@@ -183,7 +174,7 @@ class AbbyyParser(object):
         self.parse_content()
 
     def parse_paragraph_styles(self):
-        """ Paragraph styles are in their own elements at the start of the text """
+        """ Paragraph styles are on their own at the start of the ABBYY """
         styles = self.tree.findall(".//a:paragraphStyle", namespaces=self.nsm)
         fontstyles = self.tree.findall(".//a:fontStyle", namespaces=self.nsm)
         for style in styles:
@@ -191,17 +182,9 @@ class AbbyyParser(object):
             self.paragraphs[id] = dict(style.attrib)
             if 'mainFontStyleId' in style.attrib:
                 for fstyle in fontstyles:
-                    font = fstyle.get("id")
-                    if font == style.attrib['mainFontStyleId']:
+                    if fstyle.get("id") == style.attrib['mainFontStyleId']:
+                        self.paragraphs[id]['fontstyle'] = dict(fstyle.attrib)
                         break
-                self.paragraphs[id]['fontstyle'] = dict(fstyle.attrib)
-
-    def make_para_blocks(self, elem):
-        """
-        Given an text node ElementTree, make blocks for all children and
-        add them to the list of blocks
-        """
-        pass
 
     def parse_content(self):
         """ Parse each page of the book.  """
@@ -227,6 +210,12 @@ class AbbyyParser(object):
                     for para in paras:
                         # Get the paragraph style and text
                         para_id = para.get("style")
+                        if not self.paragraphs[para_id]:
+                            self.logger.info(
+                                'The block with the ID {} has no corresponding paragraphStyle'.format(
+                                    para_id
+                                )
+                            )
                         text = gettext(para).strip()
 
                         # Ignore whitespace-only pars

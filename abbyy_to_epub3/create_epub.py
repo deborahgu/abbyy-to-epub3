@@ -30,7 +30,7 @@ import sys
 import tempfile
 
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
-from abbyy_to_epub3.utils import is_increasing
+from abbyy_to_epub3.utils import dirtify_xml, is_increasing
 
 
 # Set up configuration
@@ -294,8 +294,9 @@ class Ebook(object):
         if not heading:
             heading = "Chapter {}".format(chapter_no)
 
+        # The Ebooklib library escapes the XML itself
         chapter = epub.EpubHtml(
-            title=heading,
+            title=dirtify_xml(heading).replace("\n", " "),
             direction=self.progression,
             # pad out the filename to four digits
             file_name='chap_{:0>4}.xhtml'.format(chapter_no),

@@ -22,3 +22,27 @@ def is_increasing(l):
         if a >= b:
             return False
     return True
+
+
+def dirtify_xml(text):
+    """
+    Re-adds forbidden entities to any XML string.
+    Could cause problems in the unlikely event the string literally should be
+    '&amp'
+    """
+    text = text.replace("&amp;", "&")
+    text = text.replace("&lt;", "<")
+    text = text.replace("&gt;", ">")
+    text = text.replace('"', "&quot;")
+    text = text.replace("&apos;", "'")
+    return text
+
+
+def sanitize_xml(text):
+    """ Removes forbidden entities from any XML string """
+    text = text.replace("&", "&amp;")
+    text = text.replace("<", "&lt;")
+    text = text.replace(">", "&gt;")
+    text = text.replace('"', "&quot;")
+    text = text.replace("'", "&apos;")
+    return text
