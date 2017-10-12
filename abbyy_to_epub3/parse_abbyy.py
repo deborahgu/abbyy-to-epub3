@@ -46,6 +46,9 @@ def add_last_text(blocks, page):
     mark up the last text block for that page in the list, if it exists.
     """
     elem = blocks[-1]
+    if 'page_no' not in elem:
+        # On a page_no element, so at end of previous page
+        return
     if elem['page_no'] == page:
         if 'type' in elem and elem['type'] == 'text':
             elem['last'] = True
@@ -173,6 +176,7 @@ class AbbyyParser(object):
             raise RuntimeError("Input XML document is not a supported schema.")
         self.logger.debug("Version {}".format(self.version))
         self.metadata['fr-version'] = self.version
+        self.metadata['pics_by_page'] = dict()
 
         self.parse_metadata()
         self.parse_paragraph_styles()
@@ -191,6 +195,13 @@ class AbbyyParser(object):
                     if font == style.attrib['mainFontStyleId']:
                         break
                 self.paragraphs[id]['fontstyle'] = dict(fstyle.attrib)
+
+    def make_para_blocks(self, elem):
+        """
+        Given an text node ElementTree, make blocks for all children and
+        add them to the list of blocks
+        """
+        pass
 
     def parse_content(self):
         """ Parse each page of the book.  """
@@ -258,6 +269,11 @@ class AbbyyParser(object):
                         d = dict()
 
                 elif self.is_block_type(block, "Table"):
+                    # We'll process the table by treating each of its cells
+                    # subordinate blocks as separate. Keep track of which
+                    # is the last element in a cell/row/table, so we can
+                    # close the elements after each is complete.
+                    this_row = 1
                     d = {
                         'type': 'Table',
                         'style': block.attrib,
@@ -266,39 +282,55 @@ class AbbyyParser(object):
                     self.blocks.append(d)
                     d = dict()
                     rows = block.findall(".//a:row", namespaces=self.nsm)
+                    rows_in_table = len(rows)
                     for row in rows:
+                        this_cell = 1
                         d = {
                             'type': 'TableRow',
                             'style': block.attrib,
                             'page_no': page_no,
                         }
+                        if this_row == rows_in_table:
+                            d['last_table_elem'] = True
+                        this_row += 1
                         self.blocks.append(d)
                         d = dict()
                         cells = row.findall("a:cell", namespaces=self.nsm)
+                        cells_in_row = len(cells)
                         for cell in cells:
+                            this_contents = 1
                             d = {
                                 'type': 'TableCell',
                                 'style': block.attrib,
                                 'page_no': page_no,
                             }
+                            if this_cell == cells_in_row:
+                                d['last_table_elem'] = True
+                            this_cell += 1
                             self.blocks.append(d)
                             d = dict()
-                            # FIXME some of this text identification code
-                            # used here and above can be generalized into a function
+                            # Parsing a cell is not quite like parsing regular
+                            # text.
+                            # The layout is cell -> text -> par.
                             text = cell.find("a:text", namespaces=self.nsm)
                             paras = text.findall("a:par", namespaces=self.nsm)
+                            paras_in_cell = len(paras)
                             for para in paras:
                                 para_id = para.get("style")
                                 text = gettext(para).strip()
-                                if not text:
-                                    # Ignore whitespace-only pars
+                                # Ignore whitespace-only para unless it's
+                                # an empty cell. If so, placeholder
+                                if not text and len(paras) > 1:
                                     continue
                                 d = {
                                     'type': 'TableText',
                                     'style': block.attrib,
                                     'page_no': page_no,
-                                    'text': sanitize_xml(text)
+                                    'text': sanitize_xml(text),
                                 }
+                                if this_contents == paras_in_cell:
+                                    d['last_table_elem'] = True
+                                this_contents += 1
                                 self.blocks.append(d)
                                 d = dict()
                                 if newpage:
@@ -311,12 +343,19 @@ class AbbyyParser(object):
                         'page_no': page_no,
                     }
                     self.blocks.append(d)
+
+                    # If this is an image, add it to a dict of all images
+                    # by page number, so we can strip out overlapping images
+                    if self.is_block_type(block, "Picture"):
+                        if page_no in self.metadata['pics_by_page']:
+                            self.metadata['pics_by_page'].append(d)
+                        else:
+                            self.metadata['pics_by_page'] = [d, ]
+
                     d = dict()
 
             # Mark up the last text block on the page, if there is one
-            # This is only needed for FR6
-            if self.version == "FR6":
-                add_last_text(self.blocks, page_no)
+            add_last_text(self.blocks, page_no)
 
             # For accessibility, create a page number at the end of every page
             if self.PAGES_SUPPORT:

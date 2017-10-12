@@ -210,6 +210,83 @@ class Ebook(object):
         except IOError as e:
             self.logger.warning("Cannot create cover file: {}".format(e))
 
+    def image_dim(self, block):
+        """
+        Given a dict object containing the block info for an image, generate
+        a tuple of its dimensions:
+        (left, top, right, bottom)
+        """
+        left = int(block['style']['l'])
+        top = int(block['style']['t'])
+        right = int(block['style']['r'])
+        bottom = int(block['style']['b'])
+
+        return (left, top, right, bottom)
+
+    def make_image(self, block):
+        """
+        Given a dict object containing the block info for an image, generate
+        the image HTML
+        """
+        page_no = block['page_no']
+        if page_no == 1:
+            # The first page's image is made into the cover automatically
+            return
+
+        # pad out the filename to four digits
+        origfile = '{dir}/{base}_jp2/{base}_{page:0>4}.jp2'.format(
+            dir=self.tmpdir.name,
+            base=self.base,
+            page=block['page_no']
+        )
+        basefile = 'img_{:0>4}.png'.format(self.picnum)
+        pngfile = '{}/{}'.format(self.tmpdir.name, basefile)
+        in_epub_imagefile = 'images/{}'.format(basefile)
+
+        # get image dimensions from ABBYY block attributes
+        # (left, top, right, bottom)
+        box = self.image_dim(block)
+        width = box[2] - box[0]
+        height = box[3] - box[1]
+
+        # ignore if this image is entirely encapsulated in another image
+        for each_pic in self.metadata['pics_by_page']:
+            # Ignore if this is just the block itself
+            if each_pic == block:
+                continue
+            new_box = self.image_dim(each_pic)
+            for (old, new) in zip(box, new_box):
+                if old <= new:
+                    return
+
+        # make the image:
+        try:
+            i = Image.open(origfile)
+        except IOError as e:
+            self.logger.warning("Can't open image {}: {}".format(origfile, e))
+        try:
+            i.crop(box).save(pngfile)
+        except IOError as e:
+            self.logger.warning("Can't crop image {} and save to {}: {}".format(
+                origfile, pngfile, e
+            ))
+        epubimage = epub.EpubImage()
+        epubimage.file_name = in_epub_imagefile
+        with open(pngfile, 'rb') as f:
+            epubimage.content = f.read()
+        epubimage = self.book.add_item(epubimage)
+
+        content = u'<img src="{src}" alt="Picture #{picnum}" width="{w}" height={h}>'.format(
+            src=in_epub_imagefile,
+            picnum=self.picnum,
+            w=width,
+            h=height,)
+
+        # increment the image number
+        self.picnum += 1
+
+        return content
+
     def make_chapter(self, heading, chapter_no):
         """
         Create a chapter section in an ebooklib.epub.
@@ -267,6 +344,7 @@ class Ebook(object):
             mylines = self.firsts
         else:
             mylines = self.lasts
+        self.logger.debug("Looking for headers/footers: {}".format(placement))
 
         # Look for standalone strings of digits
         digits = re.compile(r'^\d+$')
@@ -396,20 +474,6 @@ class Ebook(object):
                 return True
         return False
 
-    def clear_elements(self, content):
-        """
-        If an HTML element was opened in an earlier block, close it now.
-        """
-        if self.table_cell:
-            content += '</td>'
-            self.table_cell = False
-        elif self.table_row:
-            content += '</tr>'
-            self.table_row = False
-        elif self.table:
-            content += '</table>'
-            self.table = False
-
     def craft_html(self):
         """
         Assembles the XHTML content.
@@ -425,18 +489,21 @@ class Ebook(object):
         """
 
         # Default section to hold cover image & everything until the first heading
-        heading = "Cover"
+        heading = "Opening Section"
         chapter_no = 1
-        picnum = 1
-        #pagelist_html = '<nav epub:type="page-list" hidden="">'
-        #pagelist_html += '<h1>List of Pages</h1>'
-        #pagelist_html += '<ol>'
+        self.picnum = 1
+        pagelist_html = '<nav epub:type="page-list" hidden="">'
+        pagelist_html += '<h1>List of Pages</h1>'
+        pagelist_html += '<ol>'
         blocks_index = -1
+        self.last_row = False
 
-        # Look for headers and page numbers in FR6 documents (FR10 has markup)
-        if self.version == "FR6":
-            self.identify_headers_footers_pagenos('first')
-            self.identify_headers_footers_pagenos('last')
+        # Look for headers and page numbers
+        # FR10 has markup but isn't reliable so look there as well
+        self.identify_headers_footers_pagenos('first')
+        self.identify_headers_footers_pagenos('last')
+        self.last_row = False
+        self.last_cell = False
 
         # Make the initial chapter stub
         chapter = self.make_chapter(heading, chapter_no)
@@ -478,10 +545,7 @@ class Ebook(object):
                     noteref = 1
 
                     # Look for headers and page numbers
-                    if (
-                        self.version == "FR6" and
-                        self.is_header_footer(block, 'first')
-                    ):
+                    if self.is_header_footer(block, 'first'):
                         self.logger.debug("Stripping header {}".format(text))
                         continue
 
@@ -494,9 +558,8 @@ class Ebook(object):
                         continue
                 if role == 'footnote':
                     # footnote. Our ABBYY markup doesn't indicate references,
-                    # so fake some right above the footnote content so they'll
+                    # so fake them, right above the footnote content so they'll
                     # be reachable by all adaptive tech and user agents.
-                    self.clear_elements(chapter.content)
                     chapter.content += u'<p><a epub:type="noteref" href="#n{page}_{ref}">{ref}</a></p>'.format(
                         page=block['page_no'],
                         ref=noteref,
@@ -515,7 +578,6 @@ class Ebook(object):
                     # caption is for a table immediately following or
                     # immediately prior. Add a little styling to make it more
                     # obvious, and some accessibility helpers.
-                    self.clear_elements(chapter.content)
                     chapter.content += u'<p {style}><span class="sr-only">Table caption</span>{text}</p>'.format(
                         style=fstyling,
                         text=text,
@@ -523,7 +585,6 @@ class Ebook(object):
                 elif role == 'heading':
                     if int(block['heading']) > 1:
                         # Heading >1. Format as heading but don't make new chapter.
-                        self.clear_elements(chapter.content)
                         chapter.content += u'<h{level}>{text}</h{level}>'.format(
                             level=block['heading'], text=text
                         )
@@ -540,7 +601,6 @@ class Ebook(object):
                     # parsed for page numbers and turned into a hyperlinked
                     # nav toc pointing to page elements, but relying on headers
                     # is probably more reliable.
-                    self.clear_elements(chapter.content)
                     chapter.content += u'<p {style}>{text}</p>'.format(
                         style=fstyling,
                         text=text,
@@ -549,72 +609,36 @@ class Ebook(object):
                 chapter.add_pageref(str(block['text']))
             elif block['type'] == 'Picture':
                 # Image
-                # pad out the filename to four digits
-                origfile = '{dir}/{base}_jp2/{base}_{page:0>4}.jp2'.format(
-                    dir=self.tmpdir.name,
-                    base=self.base,
-                    page=block['page_no']
-                )
-                basefile = 'img_{:0>4}.png'.format(picnum)
-                pngfile = '{}/{}'.format(self.tmpdir.name, basefile)
-                in_epub_imagefile = 'images/{}'.format(basefile)
-
-                # get image dimensions from ABBYY block attributes
-                left = int(block['style']['l'])
-                top = int(block['style']['t'])
-                right = int(block['style']['r'])
-                bottom = int(block['style']['b'])
-                box = (left, top, right, bottom)
-                width = right - left
-                height = bottom - top
-
-                # make the image:
-                try:
-                    i = Image.open(origfile)
-                except IOError as e:
-                    self.logger.warning("Can't open image {}: {}".format(origfile, e))
-                try:
-                    i.crop(box).save(pngfile)
-                except IOError as e:
-                    self.logger.warning("Can't crop image {} and save to {}: {}".format(
-                        origfile, pngfile, e
-                    ))
-                epubimage = epub.EpubImage()
-                epubimage.file_name = in_epub_imagefile
-                with open(pngfile, 'rb') as f:
-                    epubimage.content = f.read()
-                epubimage = self.book.add_item(epubimage)
-
-                self.clear_elements(chapter.content)
-                chapter.content += u'<img src="{src}" alt="Picture #{picnum}" width="{w}" height={h}>'.format(
-                    src=in_epub_imagefile,
-                    picnum=picnum,
-                    w=width,
-                    h=height,)
-
-                # increment the image number
-                picnum += 1
+                content = self.make_image(block)
+                if content:
+                    chapter.content += content
             elif block['type'] == 'Separator' or block['type'] == 'SeparatorsBox':
                 # Separator blocks seem to be fairly randomly applied and don't
                 # correspond to anything useful in the original content
                 pass
             elif block['type'] == 'Table':
-                self.clear_elements(chapter.content)
                 chapter.content += u'<table>'
-                self.table = True
             elif block['type'] == 'TableRow':
-                self.clear_elements(chapter.content)
                 chapter.content += u'<tr>'
-                self.table_row = True
+                if 'last_table_elem' in block:
+                    self.last_row = True
             elif block['type'] == 'TableCell':
-                self.clear_elements(chapter.content)
                 chapter.content += u'<td>'
-                self.table_cell = True
+                if 'last_table_elem' in block:
+                    self.last_cell = True
             elif block['type'] == 'TableText':
                 chapter.content += u'<p {style}>{text}</p>'.format(
                     style=fstyling,
                     text=block['text'],
                 )
+                if 'last_table_elem' in block:
+                    chapter.content += u'</td>'
+                    if self.last_cell:
+                        chapter.content + u'</tr>'
+                        self.last_cell = False
+                        if self.last_row:
+                            chapter.content += u'</table>'
+                            self.last_row = False
             else:
                 self.logger.debug("Ignoring Block:\n Type: {}\n Attribs: {}".format(
                     block['type'], block['style']))
@@ -666,8 +690,7 @@ class Ebook(object):
 
         # Set the book's metadata and cover
         self.book.set_cover('images/cover.png', open(self.cover_img, 'rb').read())
-        for identifier in self.metadata['identifier']:
-            self.book.set_identifier(identifier)
+        self.book.set_identifier(self.metadata['identifier'][0])
         for language in self.metadata['language']:
             self.book.set_language(language)
         for title in self.metadata['title']:
@@ -681,15 +704,39 @@ class Ebook(object):
         if 'publisher' in self.metadata:
             for publisher in self.metadata['publisher']:
                 self.book.add_metadata('DC', 'publisher', publisher)
+        if 'identifier-access' in self.metadata:
+            for identifier_access in self.metadata['identifier-access']:
+                self.book.add_metadata('DC', 'identifier', 'Access URL: {}'.format(identifier_access))
+        if 'identifier-ark' in self.metadata:
+            for identifier_ark in self.metadata['identifier-ark']:
+                self.book.add_metadata('DC', 'identifier', 'urn:ark:{}'.format(identifier_ark))
+        if 'isbn' in self.metadata:
+            for isbn in self.metadata['isbn']:
+                self.book.add_metadata('DC', 'identifier', 'urn:isbn:{}'.format(isbn))
+        if 'oclc-id' in self.metadata:
+            for oclc_id in self.metadata['oclc-id']:
+                self.book.add_metadata('DC', 'identifier', 'urn:oclc:{}'.format(oclc_id))
+        if 'external-identifier' in self.metadata:
+            for external_identifier in self.metadata['external-identifier']:
+                self.book.add_metadata('DC', 'identifier', external_identifier)
+        if 'related-external-id' in self.metadata:
+            for related_external_id in self.metadata['related-external-id']:
+                self.book.add_metadata('DC', 'identifier', related_external_id)
+        if 'subject' in self.metadata:
+            for subject in self.metadata['subject']:
+                self.book.add_metadata('DC', 'subject', subject)
+        if 'date' in self.metadata:
+            for date in self.metadata['date']:
+                self.book.add_metadata('DC', 'date', date)
 
         # set the accessibility metadata
         self.create_accessibility_metadata()
-
         # Navigation for EPUB 3 & EPUB 2 fallback
         self.book.toc = self.chapters
         self.book.add_item(epub.EpubNcx())
         self.book.add_item(epub.EpubNav())
-        self.book.spine = ['nav'] + self.chapters
+        # cover_ncx hack to work around Adobe Digital Editions problem
+        self.book.spine = ['nav', 'cover', ] + self.chapters
 
         # define CSS style
         style = """.center {text-align: center}
