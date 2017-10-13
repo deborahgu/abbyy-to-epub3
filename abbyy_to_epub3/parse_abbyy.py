@@ -195,6 +195,8 @@ class AbbyyParser(object):
 
         pages.pop(0)    # ignore the calibration page
         for page in pages:
+            pagewidth = page.get('width')
+            pageheight = page.get('height')
             block_per_page = page.getchildren()
             if not block_per_page:
                 page_no += 1
@@ -203,6 +205,9 @@ class AbbyyParser(object):
             newpage = True
 
             for block in block_per_page:
+                blockattr = block.attrib
+                blockattr['pagewidth'] = pagewidth
+                blockattr['pageheight'] = pageheight
                 if self.is_block_type(block, "Text"):
                     paras = block.findall(".//a:par", namespaces=self.nsm)
                     # Some blocks can have multiple styles in them. We'll treat
@@ -265,7 +270,7 @@ class AbbyyParser(object):
                     this_row = 1
                     d = {
                         'type': 'Table',
-                        'style': block.attrib,
+                        'style': blockattr,
                         'page_no': page_no,
                     }
                     self.blocks.append(d)
@@ -276,7 +281,7 @@ class AbbyyParser(object):
                         this_cell = 1
                         d = {
                             'type': 'TableRow',
-                            'style': block.attrib,
+                            'style': blockattr,
                             'page_no': page_no,
                         }
                         if this_row == rows_in_table:
@@ -290,7 +295,7 @@ class AbbyyParser(object):
                             this_contents = 1
                             d = {
                                 'type': 'TableCell',
-                                'style': block.attrib,
+                                'style': blockattr,
                                 'page_no': page_no,
                             }
                             if this_cell == cells_in_row:
@@ -313,7 +318,7 @@ class AbbyyParser(object):
                                     continue
                                 d = {
                                     'type': 'TableText',
-                                    'style': block.attrib,
+                                    'style': blockattr,
                                     'page_no': page_no,
                                     'text': sanitize_xml(text),
                                 }
@@ -328,7 +333,7 @@ class AbbyyParser(object):
                     # Create an entry for non-text blocks with type & attributes
                     d = {
                         'type': block.get("blockType"),
-                        'style': block.attrib,
+                        'style': blockattr,
                         'page_no': page_no,
                     }
                     self.blocks.append(d)

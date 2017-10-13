@@ -276,7 +276,13 @@ class Ebook(object):
             epubimage.content = f.read()
         epubimage = self.book.add_item(epubimage)
 
-        content = u'<img src="{src}" alt="Picture #{picnum}" width="{w}" height={h}>'.format(
+        container_w = width / int(block['style']['pagewidth']) * 100
+        content = u'''
+        <div style="width: {c_w}%;">
+        <img src="{src}" alt="Picture #{picnum}" width="100%">
+        </div>
+        '''.format(
+            c_w=container_w,
             src=in_epub_imagefile,
             picnum=self.picnum,
             w=width,
@@ -762,6 +768,8 @@ class Ebook(object):
                 .serif {font-family: serif;}
                 .sans {font-family: sans-serif;}
                 img {
+                    padding: 0;
+                    margin: 0;
                     max-width: 100%;
                     max-height: 100%;
                     column-count: 1;
