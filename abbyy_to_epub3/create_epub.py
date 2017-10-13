@@ -304,7 +304,7 @@ class Ebook(object):
         )
         chapter.content = u''
         chapter.add_link(
-            href='style/nav.css', rel='stylesheet', type='text/css'
+            href='style/style.css', rel='stylesheet', type='text/css'
         )
         self.chapters.append(chapter)
         self.book.add_item(chapter)
@@ -689,8 +689,14 @@ class Ebook(object):
         # make the HTML chapters
         self.craft_html()
 
-        # Set the book's metadata and cover
+        # Set the book's cover
         self.book.set_cover('images/cover.png', open(self.cover_img, 'rb').read())
+        cover = self.book.items[-1]
+        cover.add_link(
+            href='style/style.css', rel='stylesheet', type='text/css'
+        )
+
+        # Set the book's metadata
         self.book.set_identifier(self.metadata['identifier'][0])
         for language in self.metadata['language']:
             self.book.set_language(language)
@@ -737,7 +743,7 @@ class Ebook(object):
         self.book.add_item(epub.EpubNcx())
         self.book.add_item(epub.EpubNav())
         # cover_ncx hack to work around Adobe Digital Editions problem
-        self.book.spine = ['nav', 'cover', ] + self.chapters
+        self.book.spine = ['cover', 'nav', ] + self.chapters
 
         # define CSS style
         style = """.center {text-align: center}
@@ -755,9 +761,21 @@ class Ebook(object):
                 .italic {font-style: italic;}
                 .serif {font-family: serif;}
                 .sans {font-family: sans-serif;}
+                img {
+                    max-width: 100%;
+                    max-height: 100%;
+                    column-count: 1;
+                    break-inside: avoid;
+                    oeb-column-number: 1;
+                }
                 """
-        nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
-        self.book.add_item(nav_css)
+        css_file = epub.EpubItem(
+            uid="style_nav",
+            file_name="style/style.css",
+            media_type="text/css",
+            content=style
+        )
+        self.book.add_item(css_file)
 
         epub.write_epub('{base}/{base}.epub'.format(base=self.base), self.book, {})
 
