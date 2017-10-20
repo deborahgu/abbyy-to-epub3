@@ -36,6 +36,7 @@ Requirements
 
 * Python 3
 * If running epubcheck, a Java Runtime environment
+* If running DAISY Ave, Node.js
 
 Usage
 =====
@@ -53,6 +54,35 @@ From the shell:
 .. code:: bash 
 
      python bin/create_epub.py styleliterarymet00cadb
+
+System dependencies
+===================
+
+If you'd like to run `epubcheck <https://github.com/IDPF/epubcheck>`_, there
+are certain system dependencies.  Depending on running environment, these may
+need to be manually installed.  On Ubuntu, I installed these with:
+
+.. code:: bash 
+
+    sudo apt-get install default-jre libpython3-dev
+
+If you'd like to run the DAISY Ace accessibility checker, you'll also need
+Node.js and Ace. On Ubuntu, I installed these with:
+
+.. code:: bash 
+
+    sudo apt-get install nodejs
+    sudo npm install ace-core -g
+
+If Ace successfully installed, you should be able to run:
+
+.. code:: bash 
+
+   ace --help
+
+at the command line. This should display usage information. For more
+information see the `Ace Getting Started Guide
+<http://inclusivepublishing.org/toolbox/accessibility-checker/getting-started/>`.
 
 Installation
 ============
@@ -72,17 +102,6 @@ You can rebuild the documentation, which is generated with Sphinx.
 
    cd docs
    make html
-
-System dependencies
-===================
-
-If you'd like to run `epubcheck <https://github.com/IDPF/epubcheck>`_, there
-are certain system dependencies.  Depending on running environment, these may
-need to be manually installed.  On Ubuntu, I installed these with:
-
-.. code:: bash 
-
-    sudo apt-get install default-jre libpython3-dev
 
 Testing
 ===================

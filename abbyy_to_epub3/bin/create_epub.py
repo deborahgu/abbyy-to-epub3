@@ -40,6 +40,12 @@ parser.add_argument(
     action='store_true',
     help='Run EpubCheck on the newly created EPUB',
 )
+parser.add_argument(
+    '--ace',
+    default=False,
+    action='store_true',
+    help='Run DAISY Ace on the newly created EPUB',
+)
 args = parser.parse_args()
 
 if args is not None:
@@ -51,6 +57,6 @@ if args is not None:
     book = create_epub.Ebook(
         docname,
         debug=debug,
-        epubcheck=args.epubcheck,
+        args=args,
     )
     book.craft_epub()

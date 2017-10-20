@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import execjs
 import logging
+
 from epubcheck import EpubCheck
 from pprint import pformat
 
@@ -47,3 +49,8 @@ class EpubVerify(object):
             ))
 
         return result
+
+    def run_ace(self, epub):
+        """ Runs DAISY Ace and stores the output. """
+        # Until I can get Ace running, this does nothing
+        pass

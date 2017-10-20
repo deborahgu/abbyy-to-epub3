@@ -68,16 +68,14 @@ class Ebook(object):
 
     book = epub.EpubBook()  # the book itself
 
-    def __init__(self, base, debug=False, epubcheck=False):
+    def __init__(self, base, debug=False, args=False):
         self.logger = logging.getLogger(__name__)
         if debug:
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
         self.debug = debug
-        self.checks = {
-            'epubcheck': epubcheck,
-        }
+        self.args = args
         self.base = base
         self.tmpdir = tempfile.TemporaryDirectory()
         self.cover_img = '{}/cover.png'.format(self.tmpdir.name)
@@ -793,10 +791,13 @@ class Ebook(object):
         epub.write_epub(epub_filename, self.book, {})
 
         # run checks
-        if self.checks['epubcheck']:
+        verifier = EpubVerify(self.debug)
+        if 'epubcheck' in self.args:
             self.logger.info("Running EpubCheck on {}".format(epub_filename))
-            verifier = EpubVerify(self.debug)
             verifier.run_epubcheck(epub_filename)
+        if 'ace' in self.args:
+            self.logger.info("Running DAISY Ace on {}".format(epub_filename))
+            verifier.run_ace(epub_filename)
 
         # clean up
         # ebooklib doesn't clean up cleanly without reset, causing problems on

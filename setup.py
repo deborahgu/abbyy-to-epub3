@@ -16,11 +16,18 @@ from setuptools import setup
 
 setup(
     name="abbyy_to_epub3",
-    version='0.1',
+    version='1.0b1',
     classifiers=[
-        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.3",
+        "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.5",
+        "License :: OSI Approved :: Apache License",
+        "Development Status :: 4 - Beta",
     ],
-    author='Internet Archive',
+    keywords='epub abbyy accessibility epub3',
+    python_requires='>=3',
+    author='Deborah Kaplan',
     packages=['abbyy_to_epub3'],
     license='Apache',
     zip_safe=False,
@@ -31,11 +38,14 @@ setup(
         'fuzzywuzzy',
         'lxml',
         'Pillow',
+        'PyExecJs',
         'pytest',
         'numeral',
         'sphinx',
         'sphinx-autobuild',
     ],
 
-    scripts=['abbyy_to_epub3/bin/create_epub.py'],
+    entry_points={
+        'console_scripts': ['abbyy_to_epub3/bin/create_epub.py'],
+    }
 )
