@@ -31,6 +31,7 @@ import tempfile
 
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
 from abbyy_to_epub3.utils import dirtify_xml, is_increasing
+from abbyy_to_epub3.verify_epub import EpubVerify
 
 
 # Set up configuration
@@ -67,13 +68,16 @@ class Ebook(object):
 
     book = epub.EpubBook()  # the book itself
 
-    def __init__(self, base, debug=False):
+    def __init__(self, base, debug=False, epubcheck=False):
         self.logger = logging.getLogger(__name__)
         if debug:
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
         self.debug = debug
+        self.checks = {
+            'epubcheck': epubcheck,
+        }
         self.base = base
         self.tmpdir = tempfile.TemporaryDirectory()
         self.cover_img = '{}/cover.png'.format(self.tmpdir.name)
@@ -279,7 +283,7 @@ class Ebook(object):
         container_w = width / int(block['style']['pagewidth']) * 100
         content = u'''
         <div style="width: {c_w}%;">
-        <img src="{src}" alt="Picture #{picnum}" width="100%">
+        <img src="{src}" alt="Picture #{picnum}">
         </div>
         '''.format(
             c_w=container_w,
@@ -785,7 +789,14 @@ class Ebook(object):
         )
         self.book.add_item(css_file)
 
-        epub.write_epub('{base}/{base}.epub'.format(base=self.base), self.book, {})
+        epub_filename = '{base}/{base}.epub'.format(base=self.base)
+        epub.write_epub(epub_filename, self.book, {})
+
+        # run checks
+        if self.checks['epubcheck']:
+            self.logger.info("Running EpubCheck on {}".format(epub_filename))
+            verifier = EpubVerify(self.debug)
+            verifier.run_epubcheck(epub_filename)
 
         # clean up
         # ebooklib doesn't clean up cleanly without reset, causing problems on

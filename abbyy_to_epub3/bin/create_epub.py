@@ -34,6 +34,12 @@ parser.add_argument(
     help='Show debugging information',
 )
 parser.add_argument('docname', help=usage)
+parser.add_argument(
+    '--epubcheck',
+    default=False,
+    action='store_true',
+    help='Run EpubCheck on the newly created EPUB',
+)
 args = parser.parse_args()
 
 if args is not None:
@@ -42,5 +48,9 @@ if args is not None:
         logger.addHandler(logging.StreamHandler())
         logger.setLevel(logging.DEBUG)
     docname = args.docname
-    book = create_epub.Ebook(docname, debug=debug)
+    book = create_epub.Ebook(
+        docname,
+        debug=debug,
+        epubcheck=args.epubcheck,
+    )
     book.craft_epub()
