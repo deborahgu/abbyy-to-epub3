@@ -20,7 +20,7 @@ from setuptools import setup
 
 setup(
     name="abbyy_to_epub3",
-    version='1.0b1',
+    version='1.0b2',
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.3",
