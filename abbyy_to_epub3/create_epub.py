@@ -14,6 +14,7 @@
 
 from collections import OrderedDict
 from ebooklib import epub
+from ebooklib.utils import create_pagebreak
 from fuzzywuzzy import fuzz
 from numeral import roman2int
 from PIL import Image
@@ -615,7 +616,7 @@ class Ebook(object):
                         text=text,
                     )
             elif block['type'] == 'Page':
-                chapter.add_pageref(str(block['text']))
+                chapter.content += create_pagebreak(str(block['text']))
             elif block['type'] == 'Picture':
                 # Image
                 content = self.make_image(block)

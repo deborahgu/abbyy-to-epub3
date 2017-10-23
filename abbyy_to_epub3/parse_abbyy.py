@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ebooklib import epub
+from ebooklib import utils as ebooklibutils
 from lxml import etree
 
 import logging
@@ -134,7 +135,7 @@ class AbbyyParser(object):
         self.blocks = blocks
 
         # Save page numbers only if using a supporting version of ebooklib
-        if hasattr(epub.EpubHtml, 'add_pageref'):
+        if 'create_pagebreak' in dir(ebooklibutils):
             self.PAGES_SUPPORT = True
         else:
             self.PAGES_SUPPORT = False
