@@ -546,12 +546,12 @@ class Ebook(object):
         """
 
         # Default section to hold cover image & everything until the first heading
-        heading = "Opening Section"
+        if 'title' in self.metadata:
+            heading = self.metadata['title'][0]
+        else:
+            heading = "Opening Section"
         chapter_no = 1
         self.picnum = 1
-        pagelist_html = '<nav epub:type="page-list" hidden="">'
-        pagelist_html += '<h1>List of Pages</h1>'
-        pagelist_html += '<ol>'
         blocks_index = -1
         self.last_row = False
 
@@ -564,6 +564,47 @@ class Ebook(object):
 
         # Make the initial chapter stub
         chapter = self.make_chapter(heading, chapter_no)
+
+        # Make a title page
+        chapter.content += u'<h1 dir="ltr" class="center">{}</h1>'.format(heading)
+        if 'title-alt-script' in self.metadata:
+            for i in self.metadata['title-alt-script']:
+                chapter.content += u'<p dir="auto" class="center bold big">{}</p>'.format(i)
+        if 'creator' in self.metadata:
+            for i in self.metadata['creator']:
+                chapter.content += u'<p dir="ltr" class="center bold">{}</p>'.format(i)
+        if 'creator-alt-script' in self.metadata:
+            for i in self.metadata['creator-alt-script']:
+                chapter.content += u'<p dir="auto" class="center bold">{}</p>'.format(i)
+        chapter.content += (
+            '<div class="offset">'
+            '<p dir="ltr">This book was produced in EPUB format by the Internet Archive.</p> '
+            '<p dir="ltr">The book pages were scanned and converted to EPUB format '
+            'automatically. This process relies on optical character '
+            'recognition, and is somewhat susceptible to errors. The book may '
+            'not offer the correct reading sequence, and there may be '
+            'weird characters, non-words, and incorrect guesses at '
+            'structure. Some page numbers and headers or footers may remain '
+            'from the scanned page. The process which identifies images might '
+            'have found stray marks on the page which are not actually images '
+            'from the book. The hidden page numbering which may be available to '
+            'your ereader corresponds to the numbered pages in the print '
+            'edition, but is not an exact match;  page numbers will increment '
+            'at the same rate as the corresponding print edition, but we may '
+            'have started numbering before the print book\'s visible page '
+            'numbers.  The Internet Archive is working to improve the scanning '
+            'process and resulting books, but in the meantime, we hope that '
+            'this book will be useful to you.</p> '
+            '<p dir="ltr">The Internet Archive was founded in 1996 to build an Internet '
+            'library and to promote universal access to all knowledge. The '
+            'Archive\'s purposes include offering permanent access for '
+            'researchers, historians, scholars, people with disabilities, and '
+            'the general public to historical collections that exist in digital '
+            'format. The Internet Archive includes texts, audio, moving images, '
+            'and software as well as archived web pages, and provides '
+            'specialized services for information access for the blind and '
+            'other persons with disabilities.</p></div>'
+        )
 
         for block in self.blocks:
             blocks_index += 1
@@ -781,6 +822,12 @@ class Ebook(object):
                 .italic {font-style: italic;}
                 .serif {font-family: serif;}
                 .sans {font-family: sans-serif;}
+                .big {font-size: 1.5em;}
+                .offset {
+                    margin: 1em;
+                    padding: 1.5em;
+                    border: black 1px solid;
+                }
                 img {
                     padding: 0;
                     margin: 0;

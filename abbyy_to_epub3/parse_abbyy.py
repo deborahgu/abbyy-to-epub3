@@ -220,12 +220,13 @@ class AbbyyParser(object):
                     for para in paras:
                         # Get the paragraph style and text
                         para_id = para.get("style")
-                        if not self.paragraphs[para_id]:
+                        if para_id not in self.paragraphs:
                             self.logger.info(
                                 'The block with the ID {} has no corresponding paragraphStyle'.format(
                                     para_id
                                 )
                             )
+                            self.paragraphs[para_id] = dict()
                         text = gettext(para).strip()
 
                         # Ignore whitespace-only pars
