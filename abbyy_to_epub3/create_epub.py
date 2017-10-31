@@ -488,6 +488,49 @@ class Ebook(object):
                 return True
         return False
 
+    def set_metadata(self):
+        """
+        Set the metadata on the epub object
+        """
+        self.book.set_identifier(self.metadata['identifier'][0])
+        for language in self.metadata['language']:
+            self.book.set_language(language)
+        for title in self.metadata['title']:
+            self.book.set_title(title)
+        if 'creator' in self.metadata:
+            for creator in self.metadata['creator']:
+                self.book.add_author(creator)
+        if 'description' in self.metadata:
+            for description in self.metadata['description']:
+                self.book.add_metadata('DC', 'description', description)
+        if 'publisher' in self.metadata:
+            for publisher in self.metadata['publisher']:
+                self.book.add_metadata('DC', 'publisher', publisher)
+        if 'identifier-access' in self.metadata:
+            for identifier_access in self.metadata['identifier-access']:
+                self.book.add_metadata('DC', 'identifier', 'Access URL: {}'.format(identifier_access))
+        if 'identifier-ark' in self.metadata:
+            for identifier_ark in self.metadata['identifier-ark']:
+                self.book.add_metadata('DC', 'identifier', 'urn:ark:{}'.format(identifier_ark))
+        if 'isbn' in self.metadata:
+            for isbn in self.metadata['isbn']:
+                self.book.add_metadata('DC', 'identifier', 'urn:isbn:{}'.format(isbn))
+        if 'oclc-id' in self.metadata:
+            for oclc_id in self.metadata['oclc-id']:
+                self.book.add_metadata('DC', 'identifier', 'urn:oclc:{}'.format(oclc_id))
+        if 'external-identifier' in self.metadata:
+            for external_identifier in self.metadata['external-identifier']:
+                self.book.add_metadata('DC', 'identifier', external_identifier)
+        if 'related-external-id' in self.metadata:
+            for related_external_id in self.metadata['related-external-id']:
+                self.book.add_metadata('DC', 'identifier', related_external_id)
+        if 'subject' in self.metadata:
+            for subject in self.metadata['subject']:
+                self.book.add_metadata('DC', 'subject', subject)
+        if 'date' in self.metadata:
+            for date in self.metadata['date']:
+                self.book.add_metadata('DC', 'date', date)
+
     def craft_html(self):
         """
         Assembles the XHTML content.
@@ -710,47 +753,11 @@ class Ebook(object):
         )
 
         # Set the book's metadata
-        self.book.set_identifier(self.metadata['identifier'][0])
-        for language in self.metadata['language']:
-            self.book.set_language(language)
-        for title in self.metadata['title']:
-            self.book.set_title(title)
-        if 'creator' in self.metadata:
-            for creator in self.metadata['creator']:
-                self.book.add_author(creator)
-        if 'description' in self.metadata:
-            for description in self.metadata['description']:
-                self.book.add_metadata('DC', 'description', description)
-        if 'publisher' in self.metadata:
-            for publisher in self.metadata['publisher']:
-                self.book.add_metadata('DC', 'publisher', publisher)
-        if 'identifier-access' in self.metadata:
-            for identifier_access in self.metadata['identifier-access']:
-                self.book.add_metadata('DC', 'identifier', 'Access URL: {}'.format(identifier_access))
-        if 'identifier-ark' in self.metadata:
-            for identifier_ark in self.metadata['identifier-ark']:
-                self.book.add_metadata('DC', 'identifier', 'urn:ark:{}'.format(identifier_ark))
-        if 'isbn' in self.metadata:
-            for isbn in self.metadata['isbn']:
-                self.book.add_metadata('DC', 'identifier', 'urn:isbn:{}'.format(isbn))
-        if 'oclc-id' in self.metadata:
-            for oclc_id in self.metadata['oclc-id']:
-                self.book.add_metadata('DC', 'identifier', 'urn:oclc:{}'.format(oclc_id))
-        if 'external-identifier' in self.metadata:
-            for external_identifier in self.metadata['external-identifier']:
-                self.book.add_metadata('DC', 'identifier', external_identifier)
-        if 'related-external-id' in self.metadata:
-            for related_external_id in self.metadata['related-external-id']:
-                self.book.add_metadata('DC', 'identifier', related_external_id)
-        if 'subject' in self.metadata:
-            for subject in self.metadata['subject']:
-                self.book.add_metadata('DC', 'subject', subject)
-        if 'date' in self.metadata:
-            for date in self.metadata['date']:
-                self.book.add_metadata('DC', 'date', date)
+        self.set_metadata()
 
         # set the accessibility metadata
         self.create_accessibility_metadata()
+
         # Navigation for EPUB 3 & EPUB 2 fallback
         self.book.toc = self.chapters
         self.book.add_item(epub.EpubNcx())
