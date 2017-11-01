@@ -1,4 +1,4 @@
-﻿# Copyright 2017 Deborah Kaplan
+# Copyright 2017 Deborah Kaplan
 #
 # This file is part of Abbyy-to-epub3.
 # Source code is available at <https://github.com/deborahgu/abbyy-to-epub3>.
@@ -28,39 +28,41 @@ usage = (
     "See the README at https://github.com/deborahgu/abbyy-to-epub3 for details."
 )
 
-parser = argparse.ArgumentParser(
-    description='Process an ABBYY file into an EPUB'
-)
-parser.add_argument(
-    '-d',
-    '--debug',
-    action='store_true',
-    help='Show debugging information',
-)
-parser.add_argument('docname', help=usage)
-parser.add_argument(
-    '--epubcheck',
-    default=False,
-    action='store_true',
-    help='Run EpubCheck on the newly created EPUB',
-)
-parser.add_argument(
-    '--ace',
-    default=False,
-    action='store_true',
-    help='Run DAISY Ace on the newly created EPUB',
-)
-args = parser.parse_args()
 
-if args is not None:
-    debug = args.debug
-    if debug:
-        logger.addHandler(logging.StreamHandler())
-        logger.setLevel(logging.DEBUG)
-    docname = args.docname
-    book = create_epub.Ebook(
-        docname,
-        debug=debug,
-        args=args,
+def main():
+    parser = argparse.ArgumentParser(
+        description='Process an ABBYY file into an EPUB'
     )
-    book.craft_epub()
+    parser.add_argument(
+        '-d',
+        '--debug',
+        action='store_true',
+        help='Show debugging information',
+    )
+    parser.add_argument('docname', help=usage)
+    parser.add_argument(
+        '--epubcheck',
+        default=False,
+        action='store_true',
+        help='Run EpubCheck on the newly created EPUB',
+    )
+    parser.add_argument(
+        '--ace',
+        default=False,
+        action='store_true',
+        help='Run DAISY Ace on the newly created EPUB',
+    )
+    args = parser.parse_args()
+
+    if args is not None:
+        debug = args.debug
+        if debug:
+            logger.addHandler(logging.StreamHandler())
+            logger.setLevel(logging.DEBUG)
+        docname = args.docname
+        book = create_epub.Ebook(
+            docname,
+            debug=debug,
+            args=args,
+        )
+        book.craft_epub()

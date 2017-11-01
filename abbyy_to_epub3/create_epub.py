@@ -22,7 +22,7 @@ from ebooklib.utils import create_pagebreak
 from fuzzywuzzy import fuzz
 from numeral import roman2int
 from PIL import Image
-from pkg_resources import Requirement, resource_filename
+from pkg_resources import resource_filename
 
 from zipfile import ZipFile
 
@@ -41,7 +41,7 @@ from abbyy_to_epub3.verify_epub import EpubVerify
 
 # Set up configuration
 config = configparser.ConfigParser()
-configfile = resource_filename(Requirement.parse("abbyy_to_epub3"), "config.ini")
+configfile = resource_filename("abbyy_to_epub3", "config.ini")
 config.read(configfile)
 
 
@@ -60,7 +60,6 @@ class Ebook(object):
     cover_img = ''    # the name of the cover image
     chapters = []     # holds each of the chapter (EpubHtml) objects
     progression = ''  # page direction
-    #pagelist = ''     # holds the page-list item
     firsts = {}       # all first lines per-page
     lasts = {}        # all last lines per-page
     # are there headers, footers, or page numbers?
@@ -851,10 +850,10 @@ class Ebook(object):
 
         # run checks
         verifier = EpubVerify(self.debug)
-        if 'epubcheck' in self.args:
+        if self.args.epubcheck:
             self.logger.info("Running EpubCheck on {}".format(epub_filename))
             verifier.run_epubcheck(epub_filename)
-        if 'ace' in self.args:
+        if self.args.ace:
             self.logger.info("Running DAISY Ace on {}".format(epub_filename))
             verifier.run_ace(epub_filename)
 

@@ -20,7 +20,7 @@ from setuptools import setup
 
 setup(
     name="abbyy_to_epub3",
-    version='1.0b2',
+    version='1.0',
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.3",
@@ -49,7 +49,11 @@ setup(
         'sphinx-autobuild',
     ],
 
+    package_data={
+        'abbyy_to_epub3': ['config.ini', ]
+    },
+
     entry_points={
-        'console_scripts': ['abbyy_to_epub3/bin/create_epub.py'],
+        'console_scripts': ['abbyy2epub=abbyy_to_epub3.commandline:main'],
     }
 )
