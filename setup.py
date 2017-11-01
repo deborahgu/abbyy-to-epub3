@@ -45,6 +45,7 @@ setup(
         'PyExecJs',
         'pytest',
         'numeral',
+        'six',
         'sphinx',
         'sphinx-autobuild',
     ],
