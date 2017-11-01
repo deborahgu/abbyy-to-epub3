@@ -61,20 +61,20 @@ class AbbyyParser(object):
 
     .. code:: html
 
-    <page>
-        <block>types Picture, Separator, Table, or Text</block>
+        <page>
+            <block>types Picture, Separator, Table, or Text</block>
 
     Text:
 
     .. code:: html
 
-    <page>
-            <region>
-            <text> contains a '\\n' as a text element
-               <par> The paragraph, repeatable
-                <line> The line, repeatable
-                    <formatting>
-                       <charParams>: The individual character
+        <page>
+                <region>
+                <text> contains a '\\n' as a text element
+                <par> The paragraph, repeatable
+                    <line> The line, repeatable
+                        <formatting>
+                        <charParams>: The individual character
 
     Image:
     Separator:

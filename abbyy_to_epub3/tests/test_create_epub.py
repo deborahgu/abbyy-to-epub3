@@ -23,25 +23,26 @@ import json
 import pytest
 
 from abbyy_to_epub3.create_epub import Ebook
+from abbyy_to_epub3.settings import TEST_DIR
 
 
 class TestAbbyyParser(object):
 
     @pytest.fixture
     def metadata(self):
-        with open("abbyy_to_epub3/tests/parsed_metadata.json") as f:
+        with open("{}/parsed_metadata.json".format(TEST_DIR)) as f:
             md = json.load(f)
         return md
 
     @pytest.fixture
     def blocks(self):
-        with open("abbyy_to_epub3/tests/parsed_blocks.json") as f:
+        with open("{}/parsed_blocks.json".format(TEST_DIR)) as f:
             b = json.load(f)
         return b
 
     @pytest.fixture
     def paragraphs(self):
-        with open("abbyy_to_epub3/tests/parsed_paragraphs.json") as f:
+        with open("{}/parsed_paragraphs.json".format(TEST_DIR)) as f:
             p = json.load(f)
         return p
 

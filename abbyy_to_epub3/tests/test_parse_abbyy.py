@@ -21,6 +21,7 @@ from ebooklib import epub
 import pytest
 
 from abbyy_to_epub3.parse_abbyy import AbbyyParser, sanitize_xml
+from abbyy_to_epub3.settings import TEST_DIR
 from abbyy_to_epub3 import constants
 
 
@@ -32,8 +33,8 @@ class TestAbbyyParser(object):
         self.paragraphs = {}
 
         parser = AbbyyParser(
-            "abbyy_to_epub3/tests/finereader_6_sample.xml",
-            "abbyy_to_epub3/tests/finereader_6_meta.xml",
+            "{}/finereader_6_sample.xml".format(TEST_DIR),
+            "{}/finereader_6_meta.xml".format(TEST_DIR),
             self.metadata,
             self.paragraphs,
             self.blocks,
@@ -48,8 +49,8 @@ class TestAbbyyParser(object):
         self.paragraphs = {}
 
         parser = AbbyyParser(
-            "abbyy_to_epub3/tests/finereader_10_sample.xml",
-            "abbyy_to_epub3/tests/finereader_10_meta.xml",
+            "{}/finereader_10_sample.xml".format(TEST_DIR),
+            "{}/finereader_10_meta.xml".format(TEST_DIR),
             self.metadata,
             self.paragraphs,
             self.blocks,

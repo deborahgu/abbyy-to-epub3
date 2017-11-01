@@ -349,8 +349,8 @@ class Ebook(object):
         it will not find:
         - constantly varied headers, as in a dictionary
         - page numbers that don't steadily increase
-        - page numbers that were misidentified in the OCR process, eg. IO2
-        - page numbers that have characters around them, eg. '* 45 *'
+        - page numbers that were misidentified in the OCR process, eg. IO2 for 102
+        - page numbers that have characters around them, eg. '~ 45 ~'
         """
 
         # running this on first lines or last lines?

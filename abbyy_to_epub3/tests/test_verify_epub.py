@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from abbyy_to_epub3.settings import TEST_DIR
 from abbyy_to_epub3.verify_epub import EpubVerify
 
 
@@ -31,7 +32,7 @@ class TestAbbyyParser(object):
         """ Running EPUBcheck on a good EPUB passes."""
         verifier = EpubVerify()
         verifier.run_epubcheck(
-            "abbyy_to_epub3/tests/sample.epub"
+            "{}/sample.epub".format(TEST_DIR)
         )
 
         assert verifier.results['epubcheck'].valid
@@ -40,7 +41,7 @@ class TestAbbyyParser(object):
         """ Running EPUBcheck on a good EPUB stores the messages."""
         verifier = EpubVerify()
         verifier.run_epubcheck(
-            "abbyy_to_epub3/tests/sample.epub"
+            "{}/sample.epub".format(TEST_DIR)
         )
 
         assert verifier.results['epubcheck'].messages[0][0] == 'PKG-012'
@@ -49,7 +50,7 @@ class TestAbbyyParser(object):
         """ Running EPUBcheck on a good EPUB currently does nothing."""
         verifier = EpubVerify()
         verifier.run_ace(
-            "abbyy_to_epub3/tests/sample.epub"
+            "{}/sample.epub".format(TEST_DIR)
         )
 
         assert 'ace' not in verifier.results
