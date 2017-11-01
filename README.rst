@@ -36,7 +36,7 @@ Requirements
 
 * Python 3
 * If running epubcheck, a Java Runtime environment
-* If running DAISY Ave, Node.js
+* If running DAISY Ace, Node.js
 
 Usage
 =====
@@ -53,7 +53,26 @@ From the shell:
 
 .. code:: bash 
 
-     python bin/create_epub.py styleliterarymet00cadb
+     abbyy2epub docname     # See *Assumptions* below.
+
+The available command line arguments are:
+
+..code:: bash
+
+    usage: abbyy2epub [-h] [-d] [--epubcheck] [--ace] docname
+
+    Process an ABBYY file into an EPUB
+    
+    positional arguments:
+      docname      A directory containing all the necessary files. See the README
+                   for details.
+    
+    optional arguments:
+      -h, --help   show this help message and exit
+      -d, --debug  Show debugging information
+      --epubcheck  Run EpubCheck on the newly created EPUB
+      --ace        Run DAISY Ace on the newly created EPUB
+
 
 System dependencies
 ===================
