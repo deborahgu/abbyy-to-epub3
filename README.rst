@@ -151,6 +151,13 @@ named ``docname``, the directory structure assumed is:
   * ``docname_0001.jp2`` is the cover image and the first image reference in the
     ABBYY.
 
+
+Further Reading
+===============
+
+Module documentation is available at
+`Read The Docs <http://abbyy-to-epub3.readthedocs.io/en/latest/>`_.
+
 Contribute
 ==========
 
