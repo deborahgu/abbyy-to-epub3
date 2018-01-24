@@ -18,7 +18,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from collections import OrderedDict
-from ebooklib import epub
 import json
 import pytest
 
@@ -39,6 +38,10 @@ class TestAbbyyParser(object):
         with open("{}/parsed_blocks.json".format(TEST_DIR)) as f:
             b = json.load(f)
         return b
+
+    @pytest.fixture
+    def pages(self):
+        return {1: 'Cover'}
 
     @pytest.fixture
     def paragraphs(self):
@@ -76,17 +79,22 @@ class TestAbbyyParser(object):
             'http://purl.org/dc/elements/1.1/', 'creator'
         )[0][0] == 'Cashore, Kristin'
 
-    def test_craft_html_chapters(self, blocks, metadata, book, monkeypatch):
+    def test_craft_html_chapters(
+        self, blocks, metadata, pages, book, monkeypatch
+    ):
         """ tests chapters created from the parsed blocks """
         monkeypatch.setattr(Ebook, 'metadata', metadata)
         monkeypatch.setattr(Ebook, 'blocks', blocks)
+        monkeypatch.setattr(Ebook, 'pages', pages)
         monkeypatch.setattr(Ebook, 'make_image', lambda Ebook, str: '<img />')
         book.craft_html()
 
         assert len(book.chapters) == 2
         assert len(book.book.items) == 2
         assert book.chapters[1].title == "FIRE"
-        assert '<p class="" style="font-size: 6pt">An imprint' in book.chapters[1].content
+        assert (
+            '<p class="" style="font-size: 6pt">An imprint'
+        ) in book.chapters[1].content
         assert book.chapters[1].file_name == 'chap_0002.xhtml'
 
     def test_make_chapter(self, metadata, book, monkeypatch):

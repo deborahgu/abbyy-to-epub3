@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 usage = (
     "A directory containing all the necessary files.\n"
-    "See the README at https://github.com/deborahgu/abbyy-to-epub3 for details."
+    "See README at https://github.com/deborahgu/abbyy-to-epub3 for details."
 )
 
 

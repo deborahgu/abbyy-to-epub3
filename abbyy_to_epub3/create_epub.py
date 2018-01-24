@@ -18,7 +18,7 @@
 
 from collections import OrderedDict
 from ebooklib import epub
-from ebooklib.utils import create_pagebreak
+from ebooklib import utils as ebooklib_utils
 from fuzzywuzzy import fuzz
 from numeral import roman2int
 from PIL import Image
@@ -31,10 +31,11 @@ import gzip
 import logging
 import os
 import re
-import sys
 import tempfile
 
+from abbyy_to_epub3.constants import skippable_pages
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
+from abbyy_to_epub3.parse_scandata import ScandataParser
 from abbyy_to_epub3.utils import dirtify_xml, is_increasing
 from abbyy_to_epub3.verify_epub import EpubVerify
 
@@ -49,7 +50,7 @@ class Ebook(object):
     """
     The Ebook object.
 
-    Holds extracted information about a book & the Ebooklib EPUB object.
+    Holds extracted information about a book & the ebooklib EPUB object.
     """
     base = ''         # the book's identifier, used in many filename
     metadata = {}     # the book's metadata
@@ -62,6 +63,7 @@ class Ebook(object):
     progression = ''  # page direction
     firsts = {}       # all first lines per-page
     lasts = {}        # all last lines per-page
+    pages = dict()    # page-by-page information from scandata
     # are there headers, footers, or page numbers?
     headers_present = False
     pagenums_found = False
@@ -89,6 +91,21 @@ class Ebook(object):
         self.logger.debug("Temp directory: {}\nidentifier: {}".format(
             self.tmpdir.name, self.base))
 
+    def load_scandata_pages(self):
+        """
+        Parse the page-by-page scandata file. This stores page size,
+        right or left leaf, and page type (eg copyright, color card, etc).
+        """
+        self.scandata = "{base}/{base}_scandata.xml".format(base=self.base)
+
+        # parse the scandata
+        parser = ScandataParser(
+            self.scandata,
+            self.pages,
+            debug=self.debug,
+        )
+        parser.parse_scandata()
+
     def create_accessibility_metadata(self):
         """ Set up accessibility metadata """
         ALT_TEXT_PRESENT = config.getboolean('Main', 'ALT_TEXT_PRESENT')
@@ -103,9 +120,10 @@ class Ebook(object):
 
         if OCR_GENERATED:
             summary += (
-                'The publication was generated using automated character recognition, '
-                'therefore it may not be an accurate rendition of the original text, '
-                'and it may not offer the correct reading sequence.'
+                'The publication was generated using automated character '
+                'recognition, therefore it may not be an accurate rendition '
+                'of the original text, and it may not offer the correct '
+                'reading sequence.'
             )
         if IMAGES_PRESENT:
             modes.append('visual')
@@ -198,8 +216,8 @@ class Ebook(object):
         """
         Extracts all of the images for the text.
 
-        For efficiency's sake, do these all at once. Memory and CPU will be at a
-        higher premium than disk space, so unzip the entire scan file into a temp
+        For efficiency's sake, do these all at once. Memory & CPU will be at a
+        higher premium than disk space, so unzip the entire scan file into temp
         directory, instead of extracting only the needed images.
         """
         images_zipped = "{base}/{base}_jp2.zip".format(base=self.base)
@@ -273,7 +291,7 @@ class Ebook(object):
         try:
             i.crop(box).save(pngfile)
         except IOError as e:
-            self.logger.warning("Can't crop image {} and save to {}: {}".format(
+            self.logger.warning("Can't crop image {} & save to {}: {}".format(
                 origfile, pngfile, e
             ))
         epubimage = epub.EpubImage()
@@ -306,7 +324,7 @@ class Ebook(object):
         if not heading:
             heading = "Chapter {}".format(chapter_no)
 
-        # The Ebooklib library escapes the XML itself
+        # The epub library escapes the XML itself
         chapter = epub.EpubHtml(
             title=dirtify_xml(heading).replace("\n", " "),
             direction=self.progression,
@@ -348,8 +366,8 @@ class Ebook(object):
         it will not find:
         - constantly varied headers, as in a dictionary
         - page numbers that don't steadily increase
-        - page numbers that were misidentified in the OCR process, eg. IO2 for 102
-        - page numbers that have characters around them, eg. '~ 45 ~'
+        - page numbers misidentified in the OCR process, eg. IO2 for 102
+        - page numbers with characters around them, eg. '~ 45 ~'
         """
 
         # running this on first lines or last lines?
@@ -394,7 +412,7 @@ class Ebook(object):
             self.logger.debug("Page #s found: {}".format(candidate_digits))
         if candidate_romans and is_increasing(candidate_romans):
             self.rpagenums_found = True
-            self.logger.debug("Roman page #s found: {}".format(candidate_romans))
+            self.logger.debug("Roman #s found: {}".format(candidate_romans))
 
         # identify match ratio
         fuzz_consecutive = 0
@@ -402,12 +420,18 @@ class Ebook(object):
         for k, v in mylines.items():
             # Check to see if there's still one page forward
             if k + 1 in mylines:
-                ratio_consecutive = fuzz.ratio(v['text'], mylines[k + 1]['text'])
+                ratio_consecutive = fuzz.ratio(
+                    v['text'],
+                    mylines[k + 1]['text']
+                )
                 mylines[k]['ratio_consecutive'] = ratio_consecutive
                 fuzz_consecutive += ratio_consecutive
             # Check to see if there's still two pages forward
             if k + 2 in mylines:
-                ratio_alternating = fuzz.ratio(v['text'], mylines[k + 2]['text'])
+                ratio_alternating = fuzz.ratio(
+                    v['text'],
+                    mylines[k + 2]['text']
+                )
                 mylines[k]['ratio_alternating'] = ratio_alternating
                 fuzz_alternating += ratio_alternating
 
@@ -432,13 +456,17 @@ class Ebook(object):
                     self.headers_present = 'consecutive'
                 else:
                     self.footers_present = 'consecutive'
-                self.logger.debug("{} repeated, consecutive pages".format(placement))
+                self.logger.debug(
+                    "{} repeated, consecutive pages".format(placement)
+                )
             elif average_alternating > HEADERS_PRESENT_THRESHOLD:
                 if placement == 'first':
                     self.headers_present = 'alternating'
                 else:
                     self.footers_present = 'alternating'
-                self.logger.debug("{} repeated, alternating pages".format(placement))
+                self.logger.debug(
+                    "{} repeated, alternating pages".format(placement)
+                )
 
     def is_header_footer(self, block, placement):
         """
@@ -471,7 +499,9 @@ class Ebook(object):
                 mylines[ourpageno]['ocr_digits'] == placement
             ):
                 # This is an identified page number
-                self.logger.debug("identified page number: {}".format(block['text']))
+                self.logger.debug(
+                    "identified page number: {}".format(block['text'])
+                )
                 return True
             if (
                 self.headers_present == 'consecutive' and
@@ -507,16 +537,26 @@ class Ebook(object):
                 self.book.add_metadata('DC', 'publisher', publisher)
         if 'identifier-access' in self.metadata:
             for identifier_access in self.metadata['identifier-access']:
-                self.book.add_metadata('DC', 'identifier', 'Access URL: {}'.format(identifier_access))
+                self.book.add_metadata(
+                    'DC', 'identifier', 'Access URL: {}'.format(
+                        identifier_access
+                    )
+                )
         if 'identifier-ark' in self.metadata:
             for identifier_ark in self.metadata['identifier-ark']:
-                self.book.add_metadata('DC', 'identifier', 'urn:ark:{}'.format(identifier_ark))
+                self.book.add_metadata(
+                    'DC', 'identifier', 'urn:ark:{}'.format(identifier_ark)
+                )
         if 'isbn' in self.metadata:
             for isbn in self.metadata['isbn']:
-                self.book.add_metadata('DC', 'identifier', 'urn:isbn:{}'.format(isbn))
+                self.book.add_metadata(
+                    'DC', 'identifier', 'urn:isbn:{}'.format(isbn)
+                )
         if 'oclc-id' in self.metadata:
             for oclc_id in self.metadata['oclc-id']:
-                self.book.add_metadata('DC', 'identifier', 'urn:oclc:{}'.format(oclc_id))
+                self.book.add_metadata(
+                    'DC', 'identifier', 'urn:oclc:{}'.format(oclc_id)
+                )
         if 'external-identifier' in self.metadata:
             for external_identifier in self.metadata['external-identifier']:
                 self.book.add_metadata('DC', 'identifier', external_identifier)
@@ -537,14 +577,14 @@ class Ebook(object):
         Create some minimal navigation:
         * Break sections at text elements marked role: heading
         * Break files at any headings with roleLevel: 1
-        This is imperfect, but better than having no navigation or monster files.
+        Imperfect, but better than having no navigation or monster files.
 
-        Images will get the alternative text of "Picture #" followed by an index
-        number for this image in the document. Barring real alternative text for
+        Images will get alternative text of "Picture #" followed by an index
+        number for this image. Barring real alternative text for
         true accessibility, this at least adds some identifying information.
         """
 
-        # Default section to hold cover image & everything until the first heading
+        # Default section to hold cover image plus all until the 1st heading
         if 'title' in self.metadata:
             heading = self.metadata['title'][0]
         else:
@@ -563,43 +603,55 @@ class Ebook(object):
 
         # Make the initial chapter stub
         chapter = self.make_chapter(heading, chapter_no)
+        endnotes = '<ul>'
+        noteref = 1
 
         # Make a title page
-        chapter.content += u'<h1 dir="ltr" class="center">{}</h1>'.format(heading)
+        chapter.content += u'<h1 dir="ltr" class="center">{}</h1>'.format(
+            heading
+        )
         if 'title-alt-script' in self.metadata:
             for i in self.metadata['title-alt-script']:
-                chapter.content += u'<p dir="auto" class="center bold big">{}</p>'.format(i)
+                chapter.content += (
+                    u'<p dir="auto" class="center bold big">{}</p>'
+                ).format(i)
         if 'creator' in self.metadata:
             for i in self.metadata['creator']:
-                chapter.content += u'<p dir="ltr" class="center bold">{}</p>'.format(i)
+                chapter.content += (
+                    u'<p dir="ltr" class="center bold">{}</p>'
+                ).format(i)
         if 'creator-alt-script' in self.metadata:
             for i in self.metadata['creator-alt-script']:
-                chapter.content += u'<p dir="auto" class="center bold">{}</p>'.format(i)
+                chapter.content += (
+                    u'<p dir="auto" class="center bold">{}</p>'
+                ).format(i)
         chapter.content += (
             '<div class="offset">'
-            '<p dir="ltr">This book was produced in EPUB format by the Internet Archive.</p> '
-            '<p dir="ltr">The book pages were scanned and converted to EPUB format '
-            'automatically. This process relies on optical character '
+            '<p dir="ltr">This book was produced in EPUB format by the '
+            'Internet Archive.</p> '
+            '<p dir="ltr">The book pages were scanned and converted to EPUB '
+            'format automatically. This process relies on optical character '
             'recognition, and is somewhat susceptible to errors. The book may '
             'not offer the correct reading sequence, and there may be '
             'weird characters, non-words, and incorrect guesses at '
             'structure. Some page numbers and headers or footers may remain '
             'from the scanned page. The process which identifies images might '
             'have found stray marks on the page which are not actually images '
-            'from the book. The hidden page numbering which may be available to '
-            'your ereader corresponds to the numbered pages in the print '
+            'from the book. The hidden page numbering which may be available '
+            'to your ereader corresponds to the numbered pages in the print '
             'edition, but is not an exact match;  page numbers will increment '
             'at the same rate as the corresponding print edition, but we may '
             'have started numbering before the print book\'s visible page '
-            'numbers.  The Internet Archive is working to improve the scanning '
-            'process and resulting books, but in the meantime, we hope that '
-            'this book will be useful to you.</p> '
-            '<p dir="ltr">The Internet Archive was founded in 1996 to build an Internet '
-            'library and to promote universal access to all knowledge. The '
-            'Archive\'s purposes include offering permanent access for '
-            'researchers, historians, scholars, people with disabilities, and '
-            'the general public to historical collections that exist in digital '
-            'format. The Internet Archive includes texts, audio, moving images, '
+            'numbers.  The Internet Archive is working to improve the '
+            'scanning process and resulting books, but in the meantime, we '
+            'hope that this book will be useful to you.</p> '
+            '<p dir="ltr">The Internet Archive was founded in 1996 to build '
+            'an Internet library and to promote universal access to all '
+            'knowledge. The Archive\'s purposes include offering permanent '
+            'access for researchers, historians, scholars, people with '
+            'disabilities, and ' 'the general public to historical '
+            'collections that exist in digital format. The Internet Archive '
+            'includes texts, audio, moving images, '
             'and software as well as archived web pages, and provides '
             'specialized services for information access for the blind and '
             'other persons with disabilities.</p></div>'
@@ -609,6 +661,12 @@ class Ebook(object):
             blocks_index += 1
 
             if 'type' not in block:
+                continue
+            if (
+                'page_no' in block and
+                block['page_no'] in self.pages and
+                self.pages[block['page_no']] in skippable_pages
+            ):
                 continue
             if (
                 'style' in block and
@@ -626,7 +684,9 @@ class Ebook(object):
                 elif 'Sans' in fontstyle['ff']:
                     fclass += 'sans '
 
-                fstyling = 'class="{fclass}" style="font-size: {fsize}pt"'.format(
+                fstyling = (
+                    'class="{fclass}" style="font-size: {fsize}pt"'
+                ).format(
                     fclass=fclass,
                     fsize=fsize,
                 )
@@ -638,9 +698,6 @@ class Ebook(object):
 
                 # This is the first text element on the page
                 if 'first' in block:
-                    # reset any footnote references
-                    noteref = 1
-
                     # Look for headers and page numbers
                     if self.is_header_footer(block, 'first'):
                         self.logger.debug("Stripping header {}".format(text))
@@ -654,14 +711,26 @@ class Ebook(object):
                         self.logger.debug("Stripping footer {}".format(text))
                         continue
                 if role == 'footnote':
-                    # footnote. Our ABBYY markup doesn't indicate references,
-                    # so fake them, right above the footnote content so they'll
-                    # be reachable by all adaptive tech and user agents.
-                    chapter.content += u'<p><a epub:type="noteref" href="#n{page}_{ref}">{ref}</a></p>'.format(
+                    # Footnote. Our ABBYY markup doesn't indicate references,
+                    # so fake them, right above the bottom of the page so
+                    # they'll be reachable by all adaptive tech & user agents.
+                    # Place as endnotes to improve cross-ereader reachability.
+
+                    chapter.content += (
+                        u'<p class="small">'
+                        u'<a epub:type="noteref" href="#n{page}_{ref}">'
+                        u'Note {ref}</a></p>'
+                    ).format(
                         page=block['page_no'],
                         ref=noteref,
                     )
-                    chapter.content += u'<aside epub:type="footnote" id="n{page}_{ref}">{text}</aside>'.format(
+                    # must use now deprecated "rearnote" instead of "endnote"
+                    # for now; endnote support is limited. Change when more
+                    # readers support endnote.
+                    endnotes += (
+                        u'<li><aside epub:type="rearnote" id="n{page}_{ref}">'
+                        u'{text}</aside></li>'
+                    ).format(
                         page=block['page_no'],
                         ref=noteref,
                         text=text,
@@ -675,22 +744,34 @@ class Ebook(object):
                     # caption is for a table immediately following or
                     # immediately prior. Add a little styling to make it more
                     # obvious, and some accessibility helpers.
-                    chapter.content += u'<p {style}><span class="sr-only">Table caption</span>{text}</p>'.format(
+                    chapter.content += (
+                        u'<p {style}><span class="sr-only">'
+                        u'Table caption</span>{text}</p>'
+                    ).format(
                         style=fstyling,
                         text=text,
                     )
                 elif role == 'heading':
                     if int(block['heading']) > 1:
-                        # Heading >1. Format as heading but don't make new chapter.
-                        chapter.content += u'<h{level}>{text}</h{level}>'.format(
-                            level=block['heading'], text=text
+                        # Heading >1. Format as heading
+                        # but don't make new chapter.
+                        chapter.content += u'<h{lev}>{text}</h{lev}>'.format(
+                            lev=block['heading'], text=text
                         )
                     else:
+                        # attach any endnotes to the chapter.
+                        if noteref > 1:
+                            chapter.content += '<hr /><h2>Chapter Notes</h2>'
+                            chapter.content += endnotes
+                            chapter.content += '</ol>'
+                            noteref = 1
+                            endnotes = '<ol>'
+
                         # Heading 1. Begin the new chapter
                         chapter_no += 1
                         chapter = self.make_chapter(text, chapter_no)
-                        chapter.content = u'<h{level}>{text}</h{level}>'.format(
-                            level=block['heading'], text=text
+                        chapter.content = u'<h{lev}>{text}</h{lev}>'.format(
+                            lev=block['heading'], text=text
                         )
                 else:
                     # Regular or other text block. Add its heading to the
@@ -703,13 +784,21 @@ class Ebook(object):
                         text=text,
                     )
             elif block['type'] == 'Page':
-                chapter.content += create_pagebreak(str(block['text']))
+                # nest this conditional; we don't want to short circuit if no
+                # pages_support
+                if self.metadata['PAGES_SUPPORT']:
+                    chapter.content += ebooklib_utils.create_pagebreak(
+                        str(block['text'])
+                    )
             elif block['type'] == 'Picture':
                 # Image
                 content = self.make_image(block)
                 if content:
                     chapter.content += content
-            elif block['type'] == 'Separator' or block['type'] == 'SeparatorsBox':
+            elif (
+                block['type'] == 'Separator' or
+                block['type'] == 'SeparatorsBox'
+            ):
                 # Separator blocks seem to be fairly randomly applied and don't
                 # correspond to anything useful in the original content
                 pass
@@ -737,8 +826,11 @@ class Ebook(object):
                             chapter.content += u'</table>'
                             self.last_row = False
             else:
-                self.logger.debug("Ignoring Block:\n Type: {}\n Attribs: {}".format(
-                    block['type'], block['style']))
+                self.logger.debug(
+                    "Ignoring Block:\n Type: {}\n Attribs: {}".format(
+                        block['type'], block['style']
+                    )
+                )
 
     def craft_epub(self):
         """ Assemble the extracted metadata & text into an EPUB  """
@@ -756,6 +848,9 @@ class Ebook(object):
         # Extract the page images and create the cover file
         self.extract_images()
 
+        # read in the page-by-page scandata file
+        self.load_scandata_pages()
+
         # parse the ABBYY
         parser = AbbyyParser(
             self.abbyy_file,
@@ -766,8 +861,8 @@ class Ebook(object):
             debug=self.debug,
         )
         parser.parse_abbyy()
-
-        # Text direction: convert IA abbreviation to ebooklib abbreviation
+        
+        # Text direction: convert IA abbreviation to epub abbreviation
         direction = {
             'lr': 'ltr',
             'rl': 'rtl',
@@ -786,7 +881,10 @@ class Ebook(object):
         self.craft_html()
 
         # Set the book's cover
-        self.book.set_cover('images/cover.png', open(self.cover_img, 'rb').read())
+        self.book.set_cover(
+            'images/cover.png',
+            open(self.cover_img, 'rb').read()
+        )
         cover = self.book.items[-1]
         cover.add_link(
             href='style/style.css', rel='stylesheet', type='text/css'
@@ -822,6 +920,7 @@ class Ebook(object):
                 .serif {font-family: serif;}
                 .sans {font-family: sans-serif;}
                 .big {font-size: 1.5em;}
+                .small {font-size: .75em;}
                 .offset {
                     margin: 1em;
                     padding: 1.5em;
@@ -857,8 +956,7 @@ class Ebook(object):
             self.logger.info("Running DAISY Ace on {}".format(epub_filename))
             verifier.run_ace(epub_filename)
 
-        # clean up
-        # ebooklib doesn't clean up cleanly without reset, causing problems on
-        # consecutive runs
+        # Clean up. ebooklib.epub doesn't clean up cleanly without reset,
+        # causing problems on consecutive runs
         self.tmpdir.cleanup()
         self.book.reset()

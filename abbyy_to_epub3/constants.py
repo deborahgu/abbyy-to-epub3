@@ -25,3 +25,11 @@ ABBYY_NSM = {
 OLD_NSM = {
     'a': OLD_NS,
 }
+
+# Some page types should always be skipped
+skippable_pages = [
+    'Cover',
+    'Copyright',
+    'Color Card',
+    'Title',
+]

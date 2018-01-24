@@ -16,12 +16,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from ebooklib import epub
 from ebooklib import utils as ebooklibutils
 from lxml import etree
 
 import logging
-import sys
 
 from abbyy_to_epub3 import constants
 from abbyy_to_epub3.utils import sanitize_xml
@@ -126,7 +124,10 @@ class AbbyyParser(object):
     version = ''
     etree = ''
 
-    def __init__(self, document, metadata_file, metadata, paragraphs, blocks, debug=False):
+    def __init__(
+        self, document, metadata_file, metadata,
+        paragraphs, blocks, debug=False
+    ):
         self.logger = logging.getLogger(__name__)
         if debug:
             self.logger.addHandler(logging.StreamHandler())
@@ -140,9 +141,9 @@ class AbbyyParser(object):
 
         # Save page numbers only if using a supporting version of ebooklib
         if 'create_pagebreak' in dir(ebooklibutils):
-            self.PAGES_SUPPORT = True
+            self.metadata['PAGES_SUPPORT'] = True
         else:
-            self.PAGES_SUPPORT = False
+            self.metadata['PAGES_SUPPORT'] = False
 
     def is_block_type(self, elem, blocktype):
         """ Identifies if an XML element is a textblock. """
@@ -358,7 +359,7 @@ class AbbyyParser(object):
             add_last_text(self.blocks, page_no)
 
             # For accessibility, create a page number at the end of every page
-            if self.PAGES_SUPPORT:
+            if self.metadata['PAGES_SUPPORT']:
                 d = {
                     'type': 'Page',
                     'text': page_no,
