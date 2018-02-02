@@ -110,7 +110,7 @@ class ArchiveBookItem(object):
             setattr(self, '%s_%s' % (name, ext), dependency)
 
 
-class Ebook(ArchiveBookItem):
+    class Ebook(ArchiveBookItem):
     """
     Ebook is a utility for generating epub3 files based on Archive.org items.
     Holds extracted information about a book & the ebooklib EPUB object.
@@ -172,7 +172,6 @@ class Ebook(ArchiveBookItem):
 
         self.logger.debug("Temp directory: {}\nidentifier: {}".format(
             self.tmpdir, self.item_identifier))
-
 
     def load_scandata_pages(self):
         """
