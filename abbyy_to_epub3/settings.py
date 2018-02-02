@@ -19,7 +19,6 @@
 import os
 
 BASE_DIR = os.getcwd()
-#BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP_DIR = BASE_DIR + '/{}'.format('abbyy_to_epub3')
 DOC_DIR = BASE_DIR + '/{}'.format('docs')
 TEST_DIR = APP_DIR + '/{}'.format('tests')
