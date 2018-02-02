@@ -23,15 +23,14 @@ from abbyy_to_epub3 import create_epub
 
 logger = logging.getLogger(__name__)
 
-usage = (
-    "A directory containing all the necessary files.\n"
-    "See README at https://github.com/deborahgu/abbyy-to-epub3 for details."
-)
-
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Process an ABBYY file into an EPUB'
+        description=(
+            'Process an ABBYY file into an EPUB.\n'
+            "See README at https://github.com/deborahgu/abbyy-to-epub3 "
+            "for details."
+        )
     )
     parser.add_argument(
         '-d',
@@ -39,7 +38,18 @@ def main():
         action='store_true',
         help='Show debugging information',
     )
-    parser.add_argument('docname', help=usage)
+    parser.add_argument(
+        'item_dir', help="The file path where this item\'s files are kept.",
+    )
+    parser.add_argument(
+        'item_identifier', help="The unique ID of this item.",
+    )
+    parser.add_argument(
+        'item_bookpath', help=(
+            "The prefix to a specific book within an item."
+            "In a simple book, usually the same as the item_identifier."
+        ),
+    )
     parser.add_argument(
         '--epubcheck',
         default=False,
@@ -59,10 +69,15 @@ def main():
         if debug:
             logger.addHandler(logging.StreamHandler())
             logger.setLevel(logging.DEBUG)
-        docname = args.docname
         book = create_epub.Ebook(
-            docname,
+            args.item_dir,
+            args.item_identifier,
+            args.item_bookpath,
             debug=debug,
             args=args,
         )
         book.craft_epub()
+
+
+if __name__ == "__main__":
+    main()

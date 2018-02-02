@@ -47,14 +47,79 @@ configfile = resource_filename("abbyy_to_epub3", "config.ini")
 config.read(configfile)
 
 
-class Ebook(object):
-    """
-    The Ebook object.
+class ArchiveBookItem(object):
+    """Archive.org is a website which contains an archive of items
+    composed of archived digital content. Archive.org items are
+    distributed across a cluster of machines called datanodes. In
+    order to access the files of an item, you need to know 4 things:
 
+    a) The Archive.org `item_identifier` (the unique ID of this item)
+       e.g. https://archive.org/details/{item_identifier}
+    b) the datanode server address which hosts this item
+    c) the `item_dir` which is the file path on this datanode where
+       this items files are kept
+    d) the name of the files within this `item_dir`
+
+    Certain archive.org items are specifically structured (file
+    organizations, contents, names) to store and play Books. Every
+    Archive Book Item contains the following files:
+    - a jp2.zip containing all the scanned images of the book
+    - an abbyy file containing the OCR'd plaintest of these scans
+    - scandata.xml whose metadata describes the structure of the book
+      (metadata, pages numbers)
+    - meta.xml which describes the entire archive.org *item*
+
+    A complication is that Archive.org Book Items may contain 1 or
+    more books. In order to accommodate this subtlety and delineate
+    between books, an `item_dir` and `item_identifier` are not
+    sufficient to isolate a specific book. To circumvent this
+    limitation, we require another identifier called the
+    `item_bookpath` which acts as a prefix to the files of a specific
+    book. Given a datanode and an `item_dir` of an Archive Book Item,
+    all the constituent files for a book can be constructed using
+    `item_identifier` and `item_bookpath` in the following ways:
+
+    - There is a single global metadata manifest file for the entire
+      Archive Item named `{item_identifier}_meta.xml`.
+    - All of the other book specific files follow the form
+      `{item_bookpath}_{file}`. e.g. `{item_bookpath}_abbyy.gz`
+
+    """
+    def __init__(self, item_dir, item_identifier, item_bookpath):
+        self.item_dir = item_dir
+        self.item_identifier = item_identifier
+        self.item_bookpath = item_bookpath
+
+        # Guarantee all input file exist
+        # These members will be set as self.`name`_`ext`, e.g. self.meta_xml
+        input_files = [
+            # prefix, name, ext
+            (item_identifier, 'meta', 'xml'),
+            (item_bookpath, 'abbyy', 'gz'),
+            (item_bookpath, 'scandata', 'xml'),
+            (item_bookpath, 'jp2', 'zip')]
+        for (subdir, name, ext) in input_files:
+            dependency = os.path.abspath(
+                os.path.join(item_dir, '%s_%s.%s' % (subdir, name, ext)))
+            if not os.path.exists(dependency):
+                self.logger.debug(
+                    "Invalid path to %s.%s: %s" % (name, ext, dependency)
+                )
+                raise OSError(
+                    "Invalid path to %s.%s: %s" % (name, ext, dependency)
+                )
+            setattr(self, '%s_%s' % (name, ext), dependency)
+
+
+class Ebook(ArchiveBookItem):
+    """
+    Ebook is a utility for generating epub3 files based on Archive.org items.
     Holds extracted information about a book & the ebooklib EPUB object.
     """
+    def __init__(
+        self, item_dir, item_identifier, item_bookpath, debug=False, args=False
+    ):
 
-    def __init__(self, base, debug=False, args=False):
         self.logger = logging.getLogger(__name__)
         if debug:
             self.logger.addHandler(logging.StreamHandler())
@@ -63,7 +128,6 @@ class Ebook(object):
         # Initialize all the book's variables cleanly
         self.debug = debug
         self.args = args
-        self.base = base       # the book's identifier, used in many filename
         self.metadata = {}     # the book's metadata
         self.blocks = []       # all <blocks> with contents, attributes
         self.paragraphs = {}   # paragraph style info
@@ -99,16 +163,22 @@ class Ebook(object):
         except (FileNotFoundError, subprocess.CalledProcessError) as e:
             self.image_processor = "pillow"
 
+        super(Ebook, self).__init__(item_dir, item_identifier, item_bookpath)
+
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.cover_img = '{}/cover.png'.format(self.tmpdir)
+        self.abbyy_file = "{tmp}/{item_identifier}_abbyy".format(
+            tmp=self.tmpdir, item_identifier=self.item_identifier)
+        self.logger.debug("Temp directory: {}\nidentifier: {}".format(
+            self.tmpdir, self.item_identifier))
+
     def load_scandata_pages(self):
         """
         Parse the page-by-page scandata file. This stores page size,
         right or left leaf, and page type (eg copyright, color card, etc).
         """
-        self.scandata = "{base}/{base}_scandata.xml".format(base=self.base)
-
-        # parse the scandata
         parser = ScandataParser(
-            self.scandata,
+            self.scandata_xml,
             self.pages,
             debug=self.debug,
         )
@@ -228,19 +298,17 @@ class Ebook(object):
         higher premium than disk space, so unzip the entire scan file into temp
         directory, instead of extracting only the needed images.
         """
-        images_zipped = "{base}/{base}_jp2.zip".format(base=self.base)
-        cover_file = "{tmp}/{base}_jp2/{base}_0001.jp2".format(
-            tmp=self.tmpdir, base=self.base
+        cover_file = "{tmp}/{item_bookpath}_jp2/{item_bookpath}_0001.jp2".format(
+            tmp=self.tmpdir, item_bookpath=self.item_bookpath
         )
         try:
-            with ZipFile(images_zipped) as f:
+            with ZipFile(self.jp2_zip) as f:
                 f.extractall(self.tmpdir)
         except BadZipFile as e:
             self.logger.error(
-                "extraction problem with {}".format(images_zipped)
+                "extraction problem with {}".format(self.jp2_zip)
             )
             raise BadZipFile
-
         # convert the JP2K file into a usable format for the cover
         f, e = os.path.splitext(os.path.basename(cover_file))
         imageobj = ImageFactory(self.image_processor)
@@ -270,9 +338,9 @@ class Ebook(object):
             return
 
         # pad out the filename to four digits
-        origfile = '{dir}/{base}_jp2/{base}_{page:0>4}.jp2'.format(
+        origfile = '{dir}/{item_bookpath}_jp2/{item_bookpath}_{page:0>4}.jp2'.format(
             dir=self.tmpdir,
-            base=self.base,
+            item_bookpath=self.item_bookpath,
             page=block['page_no']
         )
         basefile = 'img_{:0>4}.bmp'.format(self.picnum)
@@ -843,24 +911,20 @@ class Ebook(object):
                     )
                 )
 
-    def craft_epub(self):
+    def craft_epub(self, epub_outfile="out.epub"):
         """ Assemble the extracted metadata & text into an EPUB  """
-
-        # document files and directories
-        abbyy_file_zipped = "{base}/{base}_abbyy.gz".format(base=self.base)
-        metadata_file = "{base}/{base}_meta.xml".format(base=self.base)
 
         # Even if we clean up properly afterwards, using TemporaryDirectory
         # outside of a convtext manager seems to cause a resource leak
         with tempfile.TemporaryDirectory() as self.tmpdir:
             self.cover_img = '{}/cover.bmp'.format(self.tmpdir)
             self.abbyy_file = "{tmp}/{base}_abbyy".format(
-                tmp=self.tmpdir, base=self.base
+                tmp=self.tmpdir, base=self.item_identifier
             )
             self.logger.debug("Temp directory: {}\nidentifier: {}".format(
-                self.tmpdir, self.base))
+                self.tmpdir, self.item_identifier))
             # Unzip ABBYY file to disk. (Might be too huge to hold in memory.)
-            with gzip.open(abbyy_file_zipped, 'rb') as infile:
+            with gzip.open(self.abbyy_gz, 'rb') as infile:
                 with open(self.abbyy_file, 'wb') as outfile:
                     for line in infile:
                         outfile.write(line)
@@ -874,7 +938,7 @@ class Ebook(object):
             # parse the ABBYY
             parser = AbbyyParser(
                 self.abbyy_file,
-                metadata_file,
+                self.meta_xml,
                 self.metadata,
                 self.paragraphs,
                 self.blocks,
@@ -966,14 +1030,17 @@ class Ebook(object):
         )
         self.book.add_item(css_file)
 
-        epub_filename = '{base}/{base}.epub'.format(base=self.base)
-        epub.write_epub(epub_filename, self.book, {})
+        if epub_outfile.endswith('.epub'):
+            epub_outfile = epub_outfile
+        else:
+            epub_outfile = '%s.epub' % epub_outfile
+        epub.write_epub(epub_outfile, self.book, {})
 
         # run checks
         verifier = EpubVerify(self.debug)
         if self.args and self.args.epubcheck:
-            self.logger.info("Running EpubCheck on {}".format(epub_filename))
-            verifier.run_epubcheck(epub_filename)
+            self.logger.info("Running EpubCheck on {}".format(epub_outfile))
+            verifier.run_epubcheck(epub_outfile)
         if self.args and self.args.ace:
-            self.logger.info("Running DAISY Ace on {}".format(epub_filename))
-            verifier.run_ace(epub_filename)
+            self.logger.info("Running DAISY Ace on {}".format(epub_outfile))
+            verifier.run_ace(epub_outfile)
