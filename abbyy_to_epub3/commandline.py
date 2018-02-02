@@ -78,6 +78,5 @@ def main():
         )
         book.craft_epub()
 
-
 if __name__ == "__main__":
     main()

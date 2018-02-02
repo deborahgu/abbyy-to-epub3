@@ -83,7 +83,6 @@ class ArchiveBookItem(object):
       Archive Item named `{item_identifier}_meta.xml`.
     - All of the other book specific files follow the form
       `{item_bookpath}_{file}`. e.g. `{item_bookpath}_abbyy.gz`
-
     """
     def __init__(self, item_dir, item_identifier, item_bookpath):
         self.item_dir = item_dir
@@ -111,7 +110,7 @@ class ArchiveBookItem(object):
             setattr(self, '%s_%s' % (name, ext), dependency)
 
 
-class Ebook(ArchiveBookItem):
+    class Ebook(ArchiveBookItem):
     """
     Ebook is a utility for generating epub3 files based on Archive.org items.
     Holds extracted information about a book & the ebooklib EPUB object.
@@ -172,6 +171,7 @@ class Ebook(ArchiveBookItem):
         self.logger.debug("Temp directory: {}\nidentifier: {}".format(
             self.tmpdir, self.item_identifier))
 
+        
     def load_scandata_pages(self):
         """
         Parse the page-by-page scandata file. This stores page size,
