@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright 2017 Deborah Kaplan
 #
 # This file is part of Abbyy-to-epub3.
@@ -18,12 +18,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from collections import OrderedDict
+import os
 import json
 import pytest
 
 from abbyy_to_epub3.create_epub import Ebook
 from abbyy_to_epub3.settings import TEST_DIR
 
+ITEM_DIR = os.path.join(TEST_DIR, 'item_dir')
 
 class TestAbbyyParser(object):
 
