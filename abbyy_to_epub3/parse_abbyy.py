@@ -107,13 +107,13 @@ class AbbyyParser(object):
     =================   ==============
     Role name           role
     =================   ==============
-    Body text   		text
-    Footnote    		footnote
-    Header or footer	rt
-    Heading     		heading
-    Other	        	other
-    Table caption		tableCaption
-    Table of contents	contents
+    Body text           text
+    Footnote            footnote
+    Header or footer    rt
+    Heading             heading
+    Other               other
+    Table caption       tableCaption
+    Table of contents   contents
     =================   ==============
 
     """

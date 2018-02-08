@@ -39,7 +39,15 @@ def main():
         action='store_true',
         help='Show debugging information',
     )
-    parser.add_argument('docname', help=usage)
+    parser.add_argument('item_dir', help=usage)
+    parser.add_argument('item_identifier', help=usage)
+    parser.add_argument('item_bookpath', help=usage)
+    parser.add_argument(
+        '-o',
+        '--out',
+        default=None,
+        help='Output path for epub',
+    )
     parser.add_argument(
         '--epubcheck',
         default=False,
@@ -59,10 +67,14 @@ def main():
         if debug:
             logger.addHandler(logging.StreamHandler())
             logger.setLevel(logging.DEBUG)
-        docname = args.docname
         book = create_epub.Ebook(
-            docname,
+            args.item_dir,
+            args.item_identifier,
+            args.item_bookpath,
             debug=debug,
             args=args,
         )
-        book.craft_epub()
+        book.craft_epub(epub_outfile=args.out or 'out.epub')
+
+if __name__ == "__main__":
+    main()

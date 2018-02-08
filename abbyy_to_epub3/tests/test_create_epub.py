@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright 2017 Deborah Kaplan
 #
 # This file is part of Abbyy-to-epub3.
@@ -18,12 +18,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from collections import OrderedDict
+import os
 import json
 import pytest
 
 from abbyy_to_epub3.create_epub import Ebook
 from abbyy_to_epub3.settings import TEST_DIR
 
+ITEM_DIR = os.path.join(TEST_DIR, 'item_dir')
 
 class TestAbbyyParser(object):
 
@@ -51,12 +53,15 @@ class TestAbbyyParser(object):
 
     @pytest.fixture
     def book(self):
-        book = Ebook(base='testing')
+        book = Ebook(item_dir=ITEM_DIR, item_identifier='item_identifier',
+                     item_bookpath='item_bookpath')
         return book
 
     def test_create_Ebook(self, book):
         """ Instantiate an Ebook object. """
-        assert book.base == 'testing'
+        assert book.item_dir == ITEM_DIR
+        assert book.item_identifier == 'item_identifier'
+        assert book.item_bookpath == 'item_bookpath'
 
     def test_create_accessibility_metadata(self, book):
         """ Set the accessibility metadata of a default book. """
