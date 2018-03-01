@@ -204,6 +204,8 @@ class AbbyyParser(object):
         # once we have the elements we can build our data structures
         # to create the EPUB
         self.parse_content()
+        self.pages.clear()
+        gc.collect()
 
         # if we don't clear the list, the page elements will stick around
         # even after the list's scope has vanished, leaking memory
