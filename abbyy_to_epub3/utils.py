@@ -52,6 +52,16 @@ def sanitize_xml(text):
     return text
 
 
+def gettext(elem):
+    """ Given an element, get all text from within element and its children """
+    text = elem.text or ""
+    for e in elem:
+        text += gettext(e)
+        if e.tail:
+            text += e.tail.strip()
+    return text
+
+
 def fast_iter(context, func):
     """
     Garbage collect as you iterate to save memory

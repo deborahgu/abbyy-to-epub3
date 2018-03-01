@@ -24,16 +24,7 @@ import gc
 import logging
 
 from abbyy_to_epub3 import constants
-from abbyy_to_epub3.utils import fast_iter, sanitize_xml
-
-
-def gettext(elem):
-    text = elem.text or ""
-    for e in elem:
-        text += gettext(e)
-        if e.tail:
-            text += e.tail.strip()
-    return text
+from abbyy_to_epub3.utils import fast_iter, gettext, sanitize_xml
 
 
 def add_last_text(blocks, page):
@@ -113,9 +104,9 @@ class AbbyyParser(object):
     Footnote            footnote
     Header or footer    rt
     Heading             heading
-    Other                other
-    Table caption        tableCaption
-    Table of contents    contents
+    Other               other
+    Table caption       tableCaption
+    Table of contents   contents
     =================   ==============
 
     """
@@ -167,83 +158,93 @@ class AbbyyParser(object):
         self.fontStyles = dict()
         self.pages = []
 
-        print("context for parastyle")
+        # Be aggressive with garbage collection; parsing the XML hogs memory
+        gc.set_threshold(1, 1, 1)
+
+        # Get the namespace & the FR version, so we can find the other elements
+        self.find_namespace()
+
+        ###
+        # Now we find the elements we will need to construct the EPUB:
+        # paragraphStyle, fontStyle, and page.
+        # These are broken out into individual chunks after which we clean up,
+        # because parsing the XML is a memory hog.
+        ###
+
+        # fontStyle is a prerequisite for getting paragraphStyle correct
         context = etree.iterparse(
             self.document,
             events=('end',),
-            tag="{http://www.abbyy.com/FineReader_xml/FineReader10-schema-v1.xml}paragraphStyle",
+            tag="{{{}}}fontStyle".format(self.ns),
         )
-        print("fast iteration for paragraph style")
         fast_iter(context, self.decompose_xml)
-
-        # garbage collection
-        print("deleting context")
         del context
-        print("manually garbage collecting")
-        gc.collect()
-        print("context for fontStyles")
 
+        # paragraphStyle is a prerequisite for page
         context = etree.iterparse(
             self.document,
             events=('end',),
-            tag="{http://www.abbyy.com/FineReader_xml/FineReader10-schema-v1.xml}fontStyles",
+            tag="{{{}}}paragraphStyle".format(self.ns),
         )
-        print("fast iteration for fontStyles")
         fast_iter(context, self.decompose_xml)
-
-        # garbage collection
-        print("deleting context")
         del context
-        print("manually garbage collecting")
-        gc.collect()
 
+        # parse the metadata document next
         self.parse_metadata()
 
+        # finally, extract the individual page elements from the XML
         context = etree.iterparse(
             self.document,
             events=('end',),
-            tag="{http://www.abbyy.com/FineReader_xml/FineReader10-schema-v1.xml}page",
+            tag="{{{}}}page".format(self.ns),
         )
-        print("fast iteration for page")
         fast_iter(context, self.decompose_xml)
-
-        # garbage collection
-        print("deleting context")
         del context
-        print("manually garbage collecting")
-        gc.collect()
 
-        print("about to parse page styles")
+        # once we have the elements we can build our data structures
+        # to create the EPUB
         self.parse_content()
+
+        # if we don't clear the list, the page elements will stick around
+        # even after the list's scope has vanished, leaking memory
         self.pages.clear()
-        gc.collect()
+
+    def find_namespace(self):
+        """
+        find the namespace of an XML document. Assumes that the namespace of
+        the first element in the context is the namespace we need. This is more
+        memory-efficient then parsing the entire tree to get the root node.
+        """
+        context = etree.iterparse(self.document, events=('start',),)
+        for event, elem in context:
+            # Namespace depends on finereader version.
+            # We can parse FR6 schema, a little
+            if not self.version:
+                abbyy_nsm = elem.nsmap
+                if constants.ABBYY_NS in abbyy_nsm.values():
+                    self.nsm = constants.ABBYY_NSM
+                    self.ns = constants.ABBYY_NS
+                    self.version = "FR10"
+                elif constants.OLD_NS in abbyy_nsm.values():
+                    self.nsm = constants.OLD_NSM
+                    self.ns = constants.OLD_NS
+                    self.version = "FR6"
+                else:
+                    raise RuntimeError("Input XML not in a supported schema.")
+                self.logger.debug("FineReader Version {}".format(self.version))
+                self.metadata['fr-version'] = self.version
+            else:
+                return
 
     def decompose_xml(self, elem):
         """
-        preliminarily, iteratively parse the ABBYY file into data structures
-        so that intelligent parsing can happen.
+        iteratively parse the ABBYY file into data structures
+        so that intelligent parsing can happen later.
+        The ABBYY seems to be sometimes inconsistent about whether these
+        elements have a namespace, so be forgiving.
         """
 
-        # Namespace depends on finereader version. We only need fetch it once.
-        # We can parse FR6 schema, a little
-        if not self.version:
-            abbyy_nsm = elem.nsmap
-            if constants.ABBYY_NS in abbyy_nsm.values():
-                self.nsm = constants.ABBYY_NSM
-                self.ns = constants.ABBYY_NS
-                self.version = "FR10"
-            elif constants.OLD_NS in abbyy_nsm.values():
-                self.nsm = constants.OLD_NSM
-                self.ns = constants.OLD_NS
-                self.version = "FR6"
-            else:
-                raise RuntimeError("Input XML not in a supported schema.")
-            self.logger.debug("Version {}".format(self.version))
-            self.metadata['fr-version'] = self.version
-
-        # We need all the fontStyle, paragraphStyle, & page elements for later.
         if (
-
             elem.tag == "{{{}}}fontStyle".format(self.ns) or
             elem.tag == "fontStyle"
         ):
@@ -264,8 +265,6 @@ class AbbyyParser(object):
                 'mainFontStyleId' in self.fontStyles
             ):
                     self.paragraphs[id]['fontstyle'] = self.fontStyles['mainFontStyleId']
-                    print("manually garbage collecting font styles")
-                    del self.fontStyles
 
         elif (
             elem.tag == "{{{}}}page".format(self.ns) or
@@ -275,7 +274,7 @@ class AbbyyParser(object):
         else:
             return
 
-        # only garbage collect if we have found & deepcopied a node
+        # only garbage collect if we have found & processed a node
         elem.clear()
 
     def parse_content(self):
