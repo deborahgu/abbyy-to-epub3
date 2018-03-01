@@ -50,3 +50,19 @@ def sanitize_xml(text):
     text = text.replace('"', "&quot;")
     text = text.replace("'", "&apos;")
     return text
+
+
+def fast_iter(context, func):
+    """
+    Garbage collect as you iterate to save memory
+    Based on StackOverflow modification of Liza Daly's fast_iter
+    """
+    for event, elem in context:
+        func(elem)
+        # make sure your function processes any necessary descendants
+        elem.clear()
+        # Also eliminate now-empty references from the root node to elem
+        for ancestor in elem.xpath('ancestor-or-self::*'):
+            while ancestor.getprevious() is not None:
+                del ancestor.getparent()[0]
+    del context
