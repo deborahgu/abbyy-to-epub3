@@ -24,7 +24,7 @@ from numeral import roman2int
 from PIL import Image
 from pkg_resources import resource_filename
 
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 import configparser
 import gzip
@@ -224,8 +224,12 @@ class Ebook(object):
         cover_file = "{tmp}/{base}_jp2/{base}_0001.jp2".format(
             tmp=self.tmpdir.name, base=self.base
         )
-        with ZipFile(images_zipped) as f:
-            f.extractall(self.tmpdir.name)
+        try:
+            with ZipFile(images_zipped) as f:
+                f.extractall(self.tmpdir.name)
+        except BadZipFile as e:
+            self.logger.error("extraction problem with {}".format(images_zipped))
+            raise BadZipFile
 
         # convert the JP2K file into a PNG for the cover
         f, e = os.path.splitext(os.path.basename(cover_file))
@@ -949,10 +953,10 @@ class Ebook(object):
 
         # run checks
         verifier = EpubVerify(self.debug)
-        if self.args.epubcheck:
+        if self.args and self.args.epubcheck:
             self.logger.info("Running EpubCheck on {}".format(epub_filename))
             verifier.run_epubcheck(epub_filename)
-        if self.args.ace:
+        if self.args and self.args.ace:
             self.logger.info("Running DAISY Ace on {}".format(epub_filename))
             verifier.run_ace(epub_filename)
 
