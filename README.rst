@@ -19,6 +19,7 @@ Features
 #. Attempts to recognize running headers, footers, and decimal or page numbers.
    Level of confidence in fuzzy matching can be fine tuned in ``config.ini``.
    Errs on the side of minimizing false positives.
+#. Will use Kakadu image libraries if present, otherwise will fall back to Pillow.
 
 Limitations
 ===========
@@ -37,6 +38,7 @@ Requirements
 * Python 3
 * If running epubcheck, a Java Runtime environment
 * If running DAISY Ace, Node.js
+* If using Kakadu, `install the binaries <http://kakadusoftware.com/downloads/>`_ and add the your  PATH and LD_LIBRARY_PATH
 
 Usage
 =====

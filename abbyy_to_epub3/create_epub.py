@@ -21,7 +21,6 @@ from ebooklib import epub
 from ebooklib import utils as ebooklib_utils
 from fuzzywuzzy import fuzz
 from numeral import roman2int
-from PIL import Image
 from pkg_resources import resource_filename
 
 from zipfile import BadZipFile, ZipFile
@@ -31,10 +30,12 @@ import gzip
 import logging
 import os
 import re
+import subprocess
 import tempfile
 
 from abbyy_to_epub3.constants import skippable_pages
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
+from abbyy_to_epub3.image_processing import factory as ImageFactory
 from abbyy_to_epub3.parse_scandata import ScandataParser
 from abbyy_to_epub3.utils import dirtify_xml, is_increasing
 from abbyy_to_epub3.verify_epub import EpubVerify
@@ -84,12 +85,21 @@ class Ebook(object):
         self.args = args
         self.base = base
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.cover_img = '{}/cover.png'.format(self.tmpdir.name)
+        self.cover_img = '{}/cover.bmp'.format(self.tmpdir.name)
         self.abbyy_file = "{tmp}/{base}_abbyy".format(
             tmp=self.tmpdir.name, base=self.base
         )
         self.logger.debug("Temp directory: {}\nidentifier: {}".format(
             self.tmpdir.name, self.base))
+
+        # Choose the image processing library
+        try:
+            subprocess.run(
+                ["kdu_compress", "-v"], stdout=subprocess.DEVNULL, check=True
+            )
+            self.image_processor = "kakadu"
+        except (FileNotFoundError, subprocess.CalledProcessError) as e:
+            self.image_processor = "pillow"
 
     def load_scandata_pages(self):
         """
@@ -228,15 +238,15 @@ class Ebook(object):
             with ZipFile(images_zipped) as f:
                 f.extractall(self.tmpdir.name)
         except BadZipFile as e:
-            self.logger.error("extraction problem with {}".format(images_zipped))
+            self.logger.error(
+                "extraction problem with {}".format(images_zipped)
+            )
             raise BadZipFile
 
-        # convert the JP2K file into a PNG for the cover
+        # convert the JP2K file into a usable format for the cover
         f, e = os.path.splitext(os.path.basename(cover_file))
-        try:
-            Image.open(cover_file).save(self.cover_img)
-        except IOError as e:
-            self.logger.warning("Cannot create cover file: {}".format(e))
+        imageobj = ImageFactory(self.image_processor)
+        imageobj.crop_image(cover_file, self.cover_img)
 
     def image_dim(self, block):
         """
@@ -267,8 +277,8 @@ class Ebook(object):
             base=self.base,
             page=block['page_no']
         )
-        basefile = 'img_{:0>4}.png'.format(self.picnum)
-        pngfile = '{}/{}'.format(self.tmpdir.name, basefile)
+        basefile = 'img_{:0>4}.bmp'.format(self.picnum)
+        outfile = '{}/{}'.format(self.tmpdir.name, basefile)
         in_epub_imagefile = 'images/{}'.format(basefile)
 
         # get image dimensions from ABBYY block attributes
@@ -276,6 +286,11 @@ class Ebook(object):
         box = self.image_dim(block)
         width = box[2] - box[0]
         height = box[3] - box[1]
+
+        # some image processors also need the original page dimensions
+        pagewidth = float(block['style']['pagewidth'])
+        pageheight = float(block['style']['pageheight'])
+        pagedim = (pagewidth, pageheight)
 
         # ignore if this image is entirely encapsulated in another image
         for each_pic in self.metadata['pics_by_page']:
@@ -288,23 +303,15 @@ class Ebook(object):
                     return
 
         # make the image:
-        try:
-            i = Image.open(origfile)
-        except IOError as e:
-            self.logger.warning("Can't open image {}: {}".format(origfile, e))
-        try:
-            i.crop(box).save(pngfile)
-        except IOError as e:
-            self.logger.warning("Can't crop image {} & save to {}: {}".format(
-                origfile, pngfile, e
-            ))
+        imageobj = ImageFactory(self.image_processor)
+        imageobj.crop_image(origfile, outfile, dim=box, pagedim=pagedim)
         epubimage = epub.EpubImage()
         epubimage.file_name = in_epub_imagefile
-        with open(pngfile, 'rb') as f:
+        with open(outfile, 'rb') as f:
             epubimage.content = f.read()
         epubimage = self.book.add_item(epubimage)
 
-        container_w = width / int(block['style']['pagewidth']) * 100
+        container_w = width / pagewidth * 100
         content = u'''
         <div style="width: {c_w}%;">
         <img src="{src}" alt="Picture #{picnum}">
@@ -886,7 +893,7 @@ class Ebook(object):
 
         # Set the book's cover
         self.book.set_cover(
-            'images/cover.png',
+            'images/cover.bmp',
             open(self.cover_img, 'rb').read()
         )
         cover = self.book.items[-1]
