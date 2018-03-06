@@ -173,6 +173,7 @@ class Ebook(ArchiveBookItem):
         self.logger.debug("Temp directory: {}\nidentifier: {}".format(
             self.tmpdir, self.item_identifier))
 
+
     def load_scandata_pages(self):
         """
         Parse the page-by-page scandata file. This stores page size,
