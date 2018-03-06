@@ -109,6 +109,7 @@ def factory(type):
             with open(outfile, 'wb') as fh:
                 fh.write(pngout)
 
+
     class PillowProcessor(ImageProcessor):
 
         def crop_image(self, origfile, outfile, dim=False, pagedim=False):
