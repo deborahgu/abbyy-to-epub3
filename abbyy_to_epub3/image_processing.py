@@ -45,50 +45,59 @@ def factory(type):
             
             if dim:
                 # if dimensions are passed, save a crop of the image
+                if pagedim:
+                    """
+                    Convert (left, top, right, bottom) in pixels to the format
+                    wanted by kakadu: "{<top>,<left>},{<height>,<width>}"
+                    as percentages between 0.0 and 1.0.
+                    Pagedim is passed as (width, height)
+                    """
+                    (left, top, right, bottom) = dim
+                    (pagewidth, pageheight) = pagedim
+                    region_string = "{%s,%s},{%s,%s}" % (
+                        top / pageheight,
+                        left / pagewidth,
+                        (bottom - top) / pageheight,
+                        (right - left) / pagewidth
+                    )
 
-                # convert the dimensions we have
-                #   (left, top, right, bottom) in pixels
-                # to the format wanted by kakadu
-                #   "{<top>,<left>},{<height>,<width>}"
-                # as percentages between 0.0 and 1.0
-                # pagedim is passed as (width, height)
-
-                if not pagedim:
+                    # kdu_expand has to be run as a subprocess call
+                    cmd = [
+                        'kdu_expand',
+                        '-region', region_string,
+                        '-i', origfile,
+                        '-o', outfile
+                    ]
+                    try:
+                        subprocess.run(
+                            cmd, stdout=subprocess.DEVNULL, check=True
+                        )
+                    except subprocess.CalledProcessError as e:
+                        self.logger.warning(
+                            "Can't save cropped image: {}".format(e)
+                        )
+                        return
+                else:
                     self.logger.warning(
                         "Can't crop in Kakadu without page dimensions"
                     )
                     return
-
-                (left, top, right, bottom) = dim
-                (pagewidth, pageheight) = pagedim
-                region_string = "{%s,%s},{%s,%s}" % (
-                    top / pageheight,
-                    left / pagewidth,
-                    (bottom - top) / pageheight,
-                    (right - left) / pagewidth
-                )
-
+            else:
+                # without dimensions, save the entire uncropped image
                 cmd = [
                     'kdu_expand',
-                    '-region', region_string,
                     '-i', origfile,
                     '-o', outfile
                 ]
-
                 try:
-                    subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
+                    subprocess.run(
+                        cmd, stdout=subprocess.DEVNULL, check=True
+                    )
                 except subprocess.CalledProcessError as e:
                     self.logger.warning(
-                        "Can't save cropped image: {}".format(e)
+                        "Can't save uncropped image: {}".format(e)
                     )
-            else:
-                # save the entire image
-                try:
-                    Image.open(origfile).save(outfile)
-                except IOError as e:
-                    self.logger.warning(
-                        "Cannot create cover file: {}".format(e)
-                    )
+                    return
 
     class PillowProcessor(ImageProcessor):
 

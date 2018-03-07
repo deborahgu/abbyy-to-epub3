@@ -311,7 +311,9 @@ class Ebook(object):
             epubimage.content = f.read()
         epubimage = self.book.add_item(epubimage)
 
-        container_w = width / pagewidth * 100
+        # to approximate original layout, set the image container width to
+        # percentage of the page width
+        container_w = (width / pagewidth) * 100
         content = u'''
         <div style="width: {c_w}%;">
         <img src="{src}" alt="Picture #{picnum}">
