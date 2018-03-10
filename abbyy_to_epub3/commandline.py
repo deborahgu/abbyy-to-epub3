@@ -57,6 +57,11 @@ def main():
         help='Output path for epub',
     )
     parser.add_argument(
+        '--tmpdir',
+        default=None,
+        help='Specify custom path for tmp abbyy and jp2 files'
+    )
+    parser.add_argument(
         '--epubcheck',
         default=False,
         action='store_true',
@@ -79,6 +84,7 @@ def main():
             args.item_dir,
             args.item_identifier,
             args.item_bookpath,
+            tmpdir=args.tmpdir,
             debug=debug,
             args=args,
         )
