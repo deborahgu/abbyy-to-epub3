@@ -16,6 +16,17 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
+
+def mkdir_p(path):
+    """The equivalent of `mkdir -p`, make directory if it doesn't
+    exist. Returns the abspath of the resulting directory
+    """
+    if path:
+        path = os.path.abspath(path)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        return path
 
 def is_increasing(l):
     """
