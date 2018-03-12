@@ -37,7 +37,7 @@ from abbyy_to_epub3.constants import skippable_pages
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
 from abbyy_to_epub3.image_processing import factory as ImageFactory
 from abbyy_to_epub3.parse_scandata import ScandataParser
-from abbyy_to_epub3.utils import dirtify_xml, is_increasing, ensure_path_exists
+from abbyy_to_epub3.utils import dirtify_xml, is_increasing, mkdir_p
 from abbyy_to_epub3.verify_epub import EpubVerify
 
 
