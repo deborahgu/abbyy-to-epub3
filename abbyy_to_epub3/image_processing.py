@@ -107,7 +107,7 @@ def factory(type):
             Pagedim isn't used for Pillow processing but it's passed anyway
             because the caller doesn't know which library we use.
             """
-            
+
             if dim:
                 # if dimensions are passed, save a crop of the image
                 try:
