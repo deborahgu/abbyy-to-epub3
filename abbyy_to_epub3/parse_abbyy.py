@@ -264,7 +264,9 @@ class AbbyyParser(object):
                 'mainFontStyleId' in attribs and
                 'mainFontStyleId' in self.fontStyles
             ):
-                    self.paragraphs[id]['fontstyle'] = self.fontStyles['mainFontStyleId']
+                    self.paragraphs[id]['fontstyle'] = self.fontStyles[
+                        'mainFontStyleId'
+                    ]
 
         elif (
             elem.tag == "{{{}}}page".format(self.ns) or
@@ -352,6 +354,9 @@ class AbbyyParser(object):
                         self.blocks.append(d)
                         d = dict()
 
+                        para.clear()  # garbage collection
+                    del paras         # garbage collection
+
                 elif self.is_block_type(block, "Table"):
                     # We'll process the table by treating each of its cells
                     # subordinate blocks as separate. Keep track of which
@@ -419,8 +424,12 @@ class AbbyyParser(object):
                                 d = dict()
                                 if newpage:
                                     newpage = False
+                            cell.clear()        # garbage collection
+                        del cells               # garbage collection
+                        row.clear()             # garbage collection
+                    del rows                    # garbage collection
                 else:
-                    # Create an entry for non-text blocks with type & attributes
+                    # Create entry for non-text blocks with type & attributes
                     d = {
                         'type': block.get("blockType"),
                         'style': blockattr,
