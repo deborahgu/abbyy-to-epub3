@@ -41,6 +41,7 @@ setup(
         'epubcheck',
         'fuzzywuzzy',
         'lxml',
+        'mock',
         'Pillow',
         'PyExecJs',
         'pytest',
