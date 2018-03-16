@@ -113,7 +113,12 @@ def factory(type):
                 try:
                     i = Image.open(origfile)
                 except IOError as e:
-                    print("Can't open image {}: {}".format(origfile, e))
+                    self.logger.error(
+                        "Can't open image {}: {}".format(origfile, e)
+                    )
+                    raise Exception(
+                        "Can't open image {}: {}".format(origfile, e)
+                    )
                 try:
                     i.crop(dim).save(outfile)
                 except IOError as e:
