@@ -276,7 +276,7 @@ class AbbyyParser(object):
         # even after the list's scope has vanished, leaking memory
         self.pages.clear()
 
-    
+
     def find_namespace(self):
         """
         find the namespace of an XML document. Assumes that the namespace of
