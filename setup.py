@@ -28,7 +28,7 @@ def requirements():
 
 setup(
     name="abbyy_to_epub3",
-    version='1.1',
+    version='1.2',
     description='Converts abbyy files to epub3',
     url='https://github.com/internetarchive/abbyy-to-epub3',
     classifiers=[
