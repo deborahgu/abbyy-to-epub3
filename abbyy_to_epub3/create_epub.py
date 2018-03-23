@@ -366,9 +366,8 @@ class Ebook(ArchiveBookItem):
             if each_pic == block:
                 continue
             new_box = self.image_dim(each_pic)
-            for (old, new) in zip(box, new_box):
-                if old <= new:
-                    return
+            if all(i >= j for i, j in zip(box, new_box)):
+                return
 
         # make the image:
         imageobj = ImageFactory(self.image_processor)

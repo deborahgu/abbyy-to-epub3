@@ -33,15 +33,15 @@ def add_last_text(blocks, page):
     mark up the last text block for that page in the list, if it exists.
     """
     elem = blocks[-1]
-    if 'page_no' not in elem:
-        # On a page_no element, so at end of previous page
-        return
-    if elem['page_no'] == page:
+    # By leaving loop, on a page_no element, so at end of previous page
+    while 'page_no' in elem and elem['page_no'] == page:
         if 'type' in elem and elem['type'] == 'text':
             elem['last'] = True
-        elif len(blocks) > 1:
-            add_last_text(blocks[:-1], page)
-
+            return
+        if len(blocks) <= 1:
+            return
+        blocks = blocks[:-1]
+        elem = blocks[-1]
 
 class AbbyyParser(object):
     """
