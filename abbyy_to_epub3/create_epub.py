@@ -964,6 +964,7 @@ class Ebook(ArchiveBookItem):
 
             # make the HTML chapters
             self.craft_html()
+            self.logger.debug("Done assembling the HTML")
 
             # Set the book's cover
             self.book.set_cover(
