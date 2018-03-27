@@ -32,15 +32,20 @@ def add_last_text(blocks, page):
     Given a list of blocks and the page number of the last page in the list,
     mark up the last text block for that page in the list, if it exists.
     """
-    elem = blocks[-1]
-    if 'page_no' not in elem:
-        # On a page_no element, so at end of previous page
-        return
-    if elem['page_no'] == page:
-        if 'type' in elem and elem['type'] == 'text':
-            elem['last'] = True
-        elif len(blocks) > 1:
-            add_last_text(blocks[:-1], page)
+    while len(blocks) >= 1:
+        # Look for a page number in the last block our list
+        elem = blocks[-1]
+        # If page_no isn't here, we're at end of previous page
+        if 'page_no' not in elem:
+            return
+        # If page_no is here and matches, set elem to 'last'
+        if elem['page_no'] == page:
+            if 'type' in elem and elem['type'] == 'text':
+                elem['last'] = True
+                return
+        # redo loop with the list truncated by final element
+        blocks = blocks[:-1]
+        continue
 
 
 class AbbyyParser(object):
@@ -331,10 +336,12 @@ class AbbyyParser(object):
                             continue
 
                         # This is a good text chunk. Instantiate the block.
+                        # The modern ABBYY parser is consistent in its handling
+                        # of EOL hyphens, making it safe to strip them.
                         d = {
                             'type': 'Text',
                             'page_no': page_no,
-                            'text': sanitize_xml(text),
+                            'text': sanitize_xml(text).replace('¬\n', ''),
                             'role': role,
                             'style': self.paragraphs[para_id]
                         }
