@@ -42,7 +42,7 @@ def factory(type):
             """
             Given an image object, save a crop of the entire image.
             """
-            
+
             if dim:
                 # if dimensions are passed, save a crop of the image
                 if pagedim:
@@ -98,6 +98,7 @@ def factory(type):
                         "Can't save uncropped image: {}".format(e)
                     )
                     return
+
 
     class PillowProcessor(ImageProcessor):
 
