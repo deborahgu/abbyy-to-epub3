@@ -126,6 +126,15 @@ You can rebuild the documentation, which is generated with Sphinx.
    cd docs
    make html
 
+Deploying
+===================
+
+Before deploying, make sure you bump the version of the package in `__init__.py`. Then, run the `upload.sh` script in the root of the repository and enter the appropriate Internet Archive credentials when prompted.
+
+You can test that the package has been installed correctly by going to https://devpi.archive.org or by running `$ pip3 install --upgrade -i https://petaboxdevpi:{PASSWORD}@devpi.archive.org/books/formats abbyy_to_epub3`.
+
+Note that `petaboxdevpi:{PASSWORD}` is not needed inside IA network`
+
 Testing
 ===================
 
