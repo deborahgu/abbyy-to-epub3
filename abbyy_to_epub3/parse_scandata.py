@@ -44,5 +44,6 @@ class ScandataParser(object):
         pagelist = self.tree.findall("./pageData/page")
         for page in pagelist:
             num = page.get('leafNum')
-            pagetype = page.find('pageType').text
+            # In case contributors use inconsistent case, lowercase pageType
+            pagetype = page.find('pageType').text.lower()
             self.pages[int(num)] = pagetype
