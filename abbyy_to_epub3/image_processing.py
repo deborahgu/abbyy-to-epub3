@@ -73,15 +73,13 @@ def factory(type):
                             cmd, stdout=subprocess.DEVNULL, check=True
                         )
                     except subprocess.CalledProcessError as e:
-                        self.logger.warning(
+                        raise RuntimeError(
                             "Can't save cropped image: {}".format(e)
                         )
-                        return
                 else:
-                    self.logger.warning(
+                    raise RuntimeError(
                         "Can't crop in Kakadu without page dimensions"
                     )
-                    return
             else:
                 # without dimensions, save the entire uncropped image
                 cmd = [
@@ -94,10 +92,9 @@ def factory(type):
                         cmd, stdout=subprocess.DEVNULL, check=True
                     )
                 except subprocess.CalledProcessError as e:
-                    self.logger.warning(
-                        "Can't save uncropped image: {}".format(e)
+                    raise RuntimeError(
+                        "Can't open image {}: {}".format(origfile, e)
                     )
-                    return
 
     class PillowProcessor(ImageProcessor):
 
@@ -113,16 +110,12 @@ def factory(type):
                 try:
                     i = Image.open(origfile)
                 except IOError as e:
-                    self.logger.error(
-                        "Can't open image {}: {}".format(origfile, e)
-                    )
-                    raise Exception(
-                        "Can't open image {}: {}".format(origfile, e)
-                    )
+                    raise RuntimeError(
+                        "Can't open image {}: {}".format(origfile, e))
                 try:
                     i.crop(dim).save(outfile)
                 except IOError as e:
-                    self.logger.warning(
+                    raise RuntimeError(
                         "Can't crop image {} & save to {}: {}".format(
                             origfile, outfile, e
                         )
@@ -132,7 +125,7 @@ def factory(type):
                 try:
                     Image.open(origfile).save(outfile)
                 except IOError as e:
-                    self.logger.warning(
+                    raise RuntimeError(
                         "Cannot create cover file: {}".format(e)
                     )
 
