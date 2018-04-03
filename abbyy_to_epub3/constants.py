@@ -27,9 +27,13 @@ OLD_NSM = {
 }
 
 # Some page types should always be skipped
+# Instead of complicating the data structure and adding extra logic
+# on each block, just use a custom pagetype for anything where
+# "addToAccessFormats" is set to false. This is 'skippable.'
 skippable_pages = [
     'cover',
     'copyright',
     'color card',
+    'skippable',
     'title',
 ]
