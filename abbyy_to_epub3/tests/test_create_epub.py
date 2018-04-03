@@ -53,14 +53,17 @@ class TestAbbyyParser(object):
 
     @pytest.fixture
     def book(self):
-        book = Ebook(item_dir=ITEM_DIR, item_identifier='item_identifier',
-                     item_bookpath='item_bookpath')
+        book = Ebook(
+            item_identifier="item_identifier",
+            item_dir="{}/item_dir".format(TEST_DIR),
+            item_bookpath="item_bookpath"
+        )
         return book
 
     def test_create_Ebook(self, book):
         """ Instantiate an Ebook object. """
-        assert book.item_dir == ITEM_DIR
         assert book.item_identifier == 'item_identifier'
+        assert book.item_dir == '{}/item_dir'.format(TEST_DIR)
         assert book.item_bookpath == 'item_bookpath'
 
     def test_create_accessibility_metadata(self, book):
@@ -73,9 +76,9 @@ class TestAbbyyParser(object):
         assert accessibility_metadata[0][1] == OrderedDict(
             [('property', 'schema:accessibilitySummary')])
 
-    def test_set_metadata(self, metadata, book, monkeypatch):
+    def test_set_metadata(self, metadata, book):
         """ Verifies metadata from the dict parsed from the metadata file """
-        monkeypatch.setattr(Ebook, 'metadata', metadata)
+        book.metadata = metadata
         book.set_metadata()
 
         assert book.book.title == 'Fire'
@@ -88,9 +91,9 @@ class TestAbbyyParser(object):
         self, blocks, metadata, pages, book, monkeypatch
     ):
         """ tests chapters created from the parsed blocks """
-        monkeypatch.setattr(Ebook, 'metadata', metadata)
-        monkeypatch.setattr(Ebook, 'blocks', blocks)
-        monkeypatch.setattr(Ebook, 'pages', pages)
+        book.metadata = metadata
+        book.blocks = blocks
+        book.pages = pages
         monkeypatch.setattr(Ebook, 'make_image', lambda Ebook, str: '<img />')
         book.craft_html()
 
@@ -102,15 +105,17 @@ class TestAbbyyParser(object):
         ) in book.chapters[1].content
         assert book.chapters[1].file_name == 'chap_0002.xhtml'
 
-    def test_make_chapter(self, metadata, book, monkeypatch):
+    def test_make_chapter(self, metadata, book):
         """
-        create a chapter. By default the book has an opening section.
+        create a chapter.
         """
-        monkeypatch.setattr(Ebook, 'metadata', metadata)
-        book.make_chapter("Chapter name", 3)
+        book.metadata = metadata
+        book.make_chapter("Chapter One", 1)
+        book.make_chapter("Chapter Two", 2)
+        book.make_chapter("Chapter Three", 3)
 
         assert len(book.chapters) == 3
         assert len(book.book.items) == 3
-        assert book.chapters[2].title == "Chapter name"
+        assert book.chapters[2].title == "Chapter Three"
         assert book.chapters[2].content == u''
         assert book.chapters[2].file_name == 'chap_0003.xhtml'

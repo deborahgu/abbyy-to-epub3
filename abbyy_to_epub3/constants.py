@@ -28,8 +28,8 @@ OLD_NSM = {
 
 # Some page types should always be skipped
 skippable_pages = [
-    'Cover',
-    'Copyright',
-    'Color Card',
-    'Title',
+    'cover',
+    'copyright',
+    'color card',
+    'title',
 ]
