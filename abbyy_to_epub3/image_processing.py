@@ -42,7 +42,7 @@ def factory(type):
             """
             Given an image object, save a crop of the entire image.
             """
-            
+
             if dim:
                 # if dimensions are passed, save a crop of the image
                 if pagedim:
@@ -95,6 +95,7 @@ def factory(type):
                     raise RuntimeError(
                         "Can't open image {}: {}".format(origfile, e)
                     )
+
 
     class PillowProcessor(ImageProcessor):
 

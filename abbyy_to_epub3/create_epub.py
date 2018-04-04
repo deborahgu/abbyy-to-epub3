@@ -37,7 +37,7 @@ from abbyy_to_epub3.constants import skippable_pages
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
 from abbyy_to_epub3.image_processing import factory as ImageFactory
 from abbyy_to_epub3.parse_scandata import ScandataParser
-from abbyy_to_epub3.utils import dirtify_xml, is_increasing
+from abbyy_to_epub3.utils import dirtify_xml, is_increasing, mkdir_p
 from abbyy_to_epub3.verify_epub import EpubVerify
 
 
@@ -83,7 +83,6 @@ class ArchiveBookItem(object):
       Archive Item named `{item_identifier}_meta.xml`.
     - All of the other book specific files follow the form
       `{item_bookpath}_{file}`. e.g. `{item_bookpath}_abbyy.gz`
-
     """
     def __init__(self, item_dir, item_identifier, item_bookpath):
         self.item_dir = item_dir
@@ -117,7 +116,8 @@ class Ebook(ArchiveBookItem):
     Holds extracted information about a book & the ebooklib EPUB object.
     """
     def __init__(
-        self, item_dir, item_identifier, item_bookpath, debug=False, args=False
+            self, item_dir, item_identifier, item_bookpath, tmpdir=None,
+            debug=False, args=False
     ):
 
         self.logger = logging.getLogger(__name__)
@@ -165,12 +165,14 @@ class Ebook(ArchiveBookItem):
 
         super(Ebook, self).__init__(item_dir, item_identifier, item_bookpath)
 
-        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmpdir = tempfile.TemporaryDirectory(dir=mkdir_p(tmpdir))
         self.cover_img = '{}/cover.png'.format(self.tmpdir)
         self.abbyy_file = "{tmp}/{item_identifier}_abbyy".format(
             tmp=self.tmpdir, item_identifier=self.item_identifier)
+
         self.logger.debug("Temp directory: {}\nidentifier: {}".format(
             self.tmpdir, self.item_identifier))
+
 
     def load_scandata_pages(self):
         """
@@ -1104,9 +1106,10 @@ class Ebook(ArchiveBookItem):
 
         # run checks
         verifier = EpubVerify(self.debug)
-        if self.args and self.args.epubcheck:
-            self.logger.info("Running EpubCheck on {}".format(epub_outfile))
-            verifier.run_epubcheck(epub_outfile)
-        if self.args and self.args.ace:
-            self.logger.info("Running DAISY Ace on {}".format(epub_outfile))
-            verifier.run_ace(epub_outfile)
+        if self.args:
+            if self.args.epubcheck:
+                self.logger.info("Running EpubCheck on {}".format(epub_outfile))
+                verifier.run_epubcheck(epub_outfile)
+            if self.args.ace:
+                self.logger.info("Running DAISY Ace on {}".format(epub_outfile))
+                verifier.run_ace(epub_outfile)

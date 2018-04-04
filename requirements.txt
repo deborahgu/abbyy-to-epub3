@@ -1,4 +1,4 @@
-﻿ebooklib>=0.16
+ebooklib>=0.16
 epubcheck>=0.3.1
 fuzzywuzzy[speedup]>=0.15.1
 lxml==3.8.0
@@ -7,6 +7,8 @@ pillow==4.2.1
 PyExecJs>=1.4.1
 pytest>=3.2.2
 numeral>=0.1.0.11
+scandir>=1.6
 six==1.10.0
 sphinx>=1.6.0
 sphinx-autobuild
+tablib>=0.12.1
