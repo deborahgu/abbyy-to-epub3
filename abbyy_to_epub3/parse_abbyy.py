@@ -291,7 +291,6 @@ class AbbyyParser(object):
         d = {'page_no': page_no}
 
         self.pages[0].clear()    # clear the memory first
-        self.pages.pop(0)    # ignore the calibration page
         for page in self.pages:
             pagewidth = page.get('width')
             pageheight = page.get('height')
@@ -484,3 +483,7 @@ class AbbyyParser(object):
                 self.metadata[term.tag].append(term.text)
             else:
                 self.metadata[term.tag] = [term.text, ]
+
+        # if the language isn't explicitly set, assume English
+        if 'language' not in self.metadata:
+            self.metadata['language'] = 'eng'

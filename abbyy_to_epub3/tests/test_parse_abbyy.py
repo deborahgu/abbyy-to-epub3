@@ -17,12 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from ebooklib import epub
 import pytest
 
 from abbyy_to_epub3.parse_abbyy import AbbyyParser, sanitize_xml
 from abbyy_to_epub3.settings import TEST_DIR
-from abbyy_to_epub3 import constants
 
 
 class TestAbbyyParser(object):
