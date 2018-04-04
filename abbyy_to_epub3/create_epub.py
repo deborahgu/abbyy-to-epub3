@@ -325,7 +325,8 @@ class Ebook(ArchiveBookItem):
             self.logger.error(e)
             raise RuntimeError(e)
 
-        cover_file = "{tmp}/{item_bookpath}_jp2/{item_bookpath}_000{num}.jp2".format(
+        # pad out the filename to four digits
+        cover_file = "{tmp}/{item_bookpath}_jp2/{item_bookpath}_{num:0>4}.jp2".format(
             tmp=self.tmpdir, item_bookpath=self.item_bookpath, num=cover_leaf
         )
         try:
@@ -339,7 +340,11 @@ class Ebook(ArchiveBookItem):
         # convert the JP2K file into a usable format for the cover
         f, e = os.path.splitext(os.path.basename(cover_file))
         imageobj = ImageFactory(self.image_processor)
-        imageobj.crop_image(cover_file, self.cover_img)
+        try:
+            imageobj.crop_image(cover_file, self.cover_img)
+        except RuntimeError as e:
+            # for failed image creation, keep processing the epub
+            self.logger.error(e)
 
     def image_dim(self, block):
         """
@@ -396,7 +401,12 @@ class Ebook(ArchiveBookItem):
 
         # make the image:
         imageobj = ImageFactory(self.image_processor)
-        imageobj.crop_image(origfile, outfile, dim=box, pagedim=pagedim)
+        try:
+            imageobj.crop_image(origfile, outfile, dim=box, pagedim=pagedim)
+        except RuntimeError as e:
+            # for failed image creation, keep processing the epub
+            self.logger.error(e)
+            return ''
         epubimage = epub.EpubImage()
         epubimage.file_name = in_epub_imagefile
         with open(outfile, 'rb') as f:
@@ -777,6 +787,9 @@ class Ebook(ArchiveBookItem):
             ):
                 prev_pagetype = pagetype
                 pagetype = self.pages[block['page_no']]
+            else:
+                # Treat it as Normal if it's not set
+                pagetype = 'Normal'
             if pagetype in skippable_pages:
                 continue
 
@@ -920,7 +933,10 @@ class Ebook(ArchiveBookItem):
                     chapter.content += ebooklib_utils.create_pagebreak(
                         str(block['text'])
                     )
-            elif block['type'] == 'Picture':
+            elif (
+                block['type'] == 'Picture' and
+                pagetype != 'Cover'
+            ):
                 # Image
                 content = self.make_image(block)
                 if content:
