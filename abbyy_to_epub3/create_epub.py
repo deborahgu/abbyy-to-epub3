@@ -33,6 +33,7 @@ import re
 import subprocess
 import tempfile
 
+from abbyy_to_epub3 import __version__
 from abbyy_to_epub3.constants import skippable_pages
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
 from abbyy_to_epub3.image_processing import factory as ImageFactory
@@ -131,6 +132,7 @@ class Ebook(ArchiveBookItem):
         self.metadata = {}     # the book's metadata
         self.blocks = []       # all <blocks> with contents, attributes
         self.paragraphs = {}   # paragraph style info
+
         self.tmpdir = ''       # stores converted images & extracted zip files
         self.abbyy_file = ''   # the ABBYY XML file
         self.cover_img = ''    # the name of the cover image
@@ -148,6 +150,7 @@ class Ebook(ArchiveBookItem):
         self.table_row = False
         self.table_cell = False
 
+        self.tmpdir_dir = mkdir_p(tmpdir)  # create + set tmpdir
         self.book = epub.EpubBook()  # the book itself
 
         # ebooklib.epub doesn't clean up cleanly without reset,
@@ -164,14 +167,6 @@ class Ebook(ArchiveBookItem):
             self.image_processor = "pillow"
 
         super(Ebook, self).__init__(item_dir, item_identifier, item_bookpath)
-
-        self.tmpdir = tempfile.TemporaryDirectory(dir=mkdir_p(tmpdir))
-        self.cover_img = '{}/cover.png'.format(self.tmpdir)
-        self.abbyy_file = "{tmp}/{item_identifier}_abbyy".format(
-            tmp=self.tmpdir, item_identifier=self.item_identifier)
-
-        self.logger.debug("Temp directory: {}\nidentifier: {}".format(
-            self.tmpdir, self.item_identifier))
 
 
     def load_scandata_pages(self):
@@ -773,8 +768,9 @@ class Ebook(ArchiveBookItem):
             'includes texts, audio, moving images, '
             'and software as well as archived web pages, and provides '
             'specialized services for information access for the blind and '
-            'other persons with disabilities.</p></div>'
-        )
+            'other persons with disabilities.</p>'
+            '<p>Created with abbyy2epub (v.%s)</p></div>'
+        ) % __version__
 
         for block in self.blocks:
             blocks_index += 1
@@ -989,7 +985,7 @@ class Ebook(ArchiveBookItem):
 
         # Even if we clean up properly afterwards, using TemporaryDirectory
         # outside of a convtext manager seems to cause a resource leak
-        with tempfile.TemporaryDirectory() as self.tmpdir:
+        with tempfile.TemporaryDirectory(dir=self.tmpdir_dir) as self.tmpdir:
             self.cover_img = '{}/cover.png'.format(self.tmpdir)
             self.abbyy_file = "{tmp}/{base}_abbyy".format(
                 tmp=self.tmpdir, base=self.item_identifier
