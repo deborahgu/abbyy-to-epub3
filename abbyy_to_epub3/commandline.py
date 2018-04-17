@@ -84,11 +84,10 @@ def main():
             args.item_dir,
             args.item_identifier,
             args.item_bookpath,
-            tmpdir=args.tmpdir,
             debug=debug,
             args=args,
         )
-        book.craft_epub(epub_outfile=args.out or 'out.epub')
+        book.craft_epub(epub_outfile=args.out or 'out.epub', tmpdir=args.tmpdir)
 
 if __name__ == "__main__":
     main()
