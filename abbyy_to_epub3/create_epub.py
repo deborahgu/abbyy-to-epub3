@@ -398,7 +398,7 @@ class Ebook(ArchiveBookItem):
         origfile = '{dir}/{item_bookpath}_jp2/{item_bookpath}_{page:0>4}.jp2'.format(
             dir=self.tmpdir,
             item_bookpath=self.item_bookpath,
-            page=block['page_no']
+            page=block['page_no'] -1
         )
         basefile = 'img_{:0>4}.bmp'.format(self.picnum)
         outfile = '{}/{}'.format(self.tmpdir, basefile)
