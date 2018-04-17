@@ -31,7 +31,6 @@ OLD_NSM = {
 # on each block, just use a custom pagetype for anything where
 # "addToAccessFormats" is set to false. This is 'skippable.'
 skippable_pages = [
-    'cover',
     'copyright',
     'color card',
     'skippable',
