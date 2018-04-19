@@ -150,10 +150,11 @@ class Ebook(ArchiveBookItem):
         self.table_cell = False
 
         self.book = epub.EpubBook()  # the book itself
-
         # ebooklib.epub doesn't clean up cleanly without reset,
         # causing problems on consecutive runs
         self.book.reset()
+        self.verifier = EpubVerify(self.debug)
+
 
         # Choose the image processing library
         try:
@@ -356,7 +357,7 @@ class Ebook(ArchiveBookItem):
         imageobj = ImageFactory(self.image_processor)
         try:
             imageobj.crop_image(cover_jp2, cover_bmp)  # jp2 to bmp
-            imageobj.convert_bmp2png(
+            imageobj.convert2png(
                 # bmp seems to break in ADE and other readers;
                 # convert bmp to png
                 cover_bmp, cover_png, resize=(800, 1200))
@@ -669,8 +670,10 @@ class Ebook(ArchiveBookItem):
         for title in self.metadata['title']:
             self.book.set_title(title)
         if 'creator' in self.metadata:
-            for creator in self.metadata['creator']:
-                self.book.add_author(creator)
+            creator_uid = 'creator'
+            for i, creator in enumerate(self.metadata['creator']):
+                self.book.add_author(creator, uid=creator_uid)
+                creator_uid = 'creator_{creator_uid}'.format(creator_uid=i)
         if 'description' in self.metadata:
             for description in self.metadata['description']:
                 self.book.add_metadata('DC', 'description', description)
@@ -1051,6 +1054,8 @@ class Ebook(ArchiveBookItem):
                 'lr': 'ltr',
                 'rl': 'rtl',
             }
+
+            self.progression = 'default'
             if 'page-progression' in self.metadata:
                 self.progression = direction[
                     self.metadata['page-progression'][0]
@@ -1061,6 +1066,11 @@ class Ebook(ArchiveBookItem):
                 # direction. HTML, used in the content pages, uses 'auto'.
                 self.progression = 'auto'
                 self.book.set_direction('default')
+
+            # `default` is only valid in initial set_direction;
+            # afterwards `auto` is used
+            if self.progression == 'default':
+                self.progression = 'auto'
 
             # get the finereader version
             if 'fr-version' in self.metadata:
@@ -1110,7 +1120,7 @@ class Ebook(ArchiveBookItem):
             img {
                 padding: 0;
                 margin: 0;
-                0max-width: 100%;
+                max-width: 100%;
                 max-height: 100%;
                 column-count: 1;
                 break-inside: avoid;
@@ -1132,8 +1142,22 @@ class Ebook(ArchiveBookItem):
             epub_outfile = '%s.epub' % epub_outfile
         epub.write_epub(epub_outfile, self.book, {})
 
-        # run checks
-        verifier = EpubVerify(self.debug)
+        # run validation on epub
         if self.args and self.args.epubcheck:
-            self.logger.info("Running EpubCheck on {}".format(epub_outfile))
-            verifier.run_epubcheck(epub_outfile)
+            self.validate_epub(epub_outfile)
+
+    def validate_epub(self, epub_file):
+        self.logger.debug("Running EpubCheck on {}".format(epub_file))
+        result = self.verifier.run_epubcheck(epub_file)
+        if not self.debug:
+            # we probably shouldn't hard code this list:
+            exceptions = ['Non-standard image resource of type image/x-ms-bmp found.']
+            errors = [err for err in result.messages if
+                      # filter out warnings (i.e. non errors) if not
+                      # in debug mode
+                      err.level.lower() == 'error' and
+                      # filter our errors whose messages match known /
+                      # approved exceptions
+                      err.message not in exceptions]
+            if errors:
+                raise RuntimeError(errors)
