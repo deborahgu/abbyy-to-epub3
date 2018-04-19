@@ -1125,10 +1125,6 @@ class Ebook(ArchiveBookItem):
 
         # run checks
         verifier = EpubVerify(self.debug)
-        if self.args:
-            if self.args.epubcheck:
-                self.logger.info("Running EpubCheck on {}".format(epub_outfile))
-                verifier.run_epubcheck(epub_outfile)
-            if self.args.ace:
-                self.logger.info("Running DAISY Ace on {}".format(epub_outfile))
-                verifier.run_ace(epub_outfile)
+        if self.args and self.args.epubcheck:
+            self.logger.info("Running EpubCheck on {}".format(epub_outfile))
+            verifier.run_epubcheck(epub_outfile)
