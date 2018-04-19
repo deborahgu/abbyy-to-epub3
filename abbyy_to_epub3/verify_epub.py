@@ -26,7 +26,7 @@ from pprint import pformat
 class EpubVerify(object):
     """
     Provides tools for verifying the quality of the EPUB,
-    using common libraries such as EPUBcheck and DAISY Ace.
+    using common libraries such as EPUBcheck.
     Where sensible, provides tools for automatically parsing the output.
     """
 
@@ -53,8 +53,3 @@ class EpubVerify(object):
             ))
 
         return result
-
-    def run_ace(self, epub):
-        """ Runs DAISY Ace and stores the output. """
-        # Until I can get Ace running, this does nothing
-        pass

@@ -37,7 +37,6 @@ Requirements
 
 * Python 3
 * If running epubcheck, a Java Runtime environment
-* If running DAISY Ace, Node.js
 * If using Kakadu, `install the binaries <http://kakadusoftware.com/downloads/>`_ and add the your  PATH and LD_LIBRARY_PATH
 
 Usage
@@ -61,7 +60,7 @@ The available command line arguments are:
 
 .. code:: bash 
 
-    usage: abbyy2epub [-h] [-d] [--epubcheck] [--ace] docname
+    usage: abbyy2epub [-h] [-d] [--epubcheck] docname
 
     Process an ABBYY file into an EPUB
 
@@ -75,7 +74,6 @@ The available command line arguments are:
       -h, --help   show this help message and exit
       -d, --debug  Show debugging information
       --epubcheck  Run EpubCheck on the newly created EPUB
-      --ace        Run DAISY Ace on the newly created EPUB
 
 
 System dependencies
@@ -89,23 +87,6 @@ need to be manually installed.  On Ubuntu, I installed these with:
 
     sudo apt-get install default-jre libpython3-dev
 
-If you'd like to run the DAISY Ace accessibility checker, you'll also need
-Node.js and Ace. On Ubuntu, I installed these with:
-
-.. code:: bash
-
-    sudo apt-get install nodejs
-    sudo npm install ace-core -g
-
-If Ace successfully installed, you should be able to run:
-
-.. code:: bash
-
-   ace --help
-
-at the command line. This should display usage information. For more
-information see the `Ace Getting Started Guide
-<http://inclusivepublishing.org/toolbox/accessibility-checker/getting-started/>`.
 
 Installation
 ============

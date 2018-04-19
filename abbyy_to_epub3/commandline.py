@@ -67,12 +67,6 @@ def main():
         action='store_true',
         help='Run EpubCheck on the newly created EPUB',
     )
-    parser.add_argument(
-        '--ace',
-        default=False,
-        action='store_true',
-        help='Run DAISY Ace on the newly created EPUB',
-    )
     args = parser.parse_args()
 
     if args is not None:
