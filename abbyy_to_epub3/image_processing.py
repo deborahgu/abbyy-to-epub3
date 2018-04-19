@@ -34,11 +34,16 @@ class ImageProcessor(object):
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
+    def convert_bmp2png(self, bmp, png, resize):
+        im = Image.open(bmp)
+        if resize:
+            im = im.resize(resize)
+        im.save(png, 'png')
 
 def factory(type):
 
     class KakaduProcessor(ImageProcessor):
-        def crop_image(self, origfile, outfile, dim=False, pagedim=False):
+        def crop_image(self, origfile, outfile, discard_level=2, dim=False, pagedim=False):
             """
             Given an image object, save a crop of the entire image.
             """
@@ -65,6 +70,8 @@ def factory(type):
                     cmd = [
                         'kdu_expand',
                         '-region', region_string,
+                        '-reduce', str(discard_level),
+                        '-no_seek',
                         '-i', origfile,
                         '-o', outfile
                     ]
@@ -72,6 +79,8 @@ def factory(type):
                         subprocess.run(
                             cmd, stdout=subprocess.DEVNULL, check=True
                         )
+                        # XXX TODO:
+                        # => 'bmptopnm -quiet | ppmtoppm -quiet'
                     except subprocess.CalledProcessError as e:
                         raise RuntimeError(
                             "Can't save cropped image: {}".format(e)
