@@ -34,8 +34,8 @@ class ImageProcessor(object):
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
-    def convert_bmp2png(self, bmp, png, resize):
-        im = Image.open(bmp)
+    def convert2png(self, original, png, resize):
+        im = Image.open(original)
         if resize:
             im = im.resize(resize)
         im.save(png, 'png')
@@ -93,6 +93,8 @@ def factory(type):
                 # without dimensions, save the entire uncropped image
                 cmd = [
                     'kdu_expand',
+                    '-reduce', str(discard_level),
+                    '-no_seek',
                     '-i', origfile,
                     '-o', outfile
                 ]

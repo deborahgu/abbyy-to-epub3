@@ -65,7 +65,11 @@ class TestImageFactory(object):
         infile = 'input_filename'
         outfile = 'output_filename'
         expected = [
-            'kdu_expand', '-i', 'input_filename', '-o', 'output_filename'
+            'kdu_expand',
+            '-reduce', '2',
+            '-no_seek',
+            '-i', 'input_filename',
+            '-o', 'output_filename'
         ]
 
         test_image.crop_image(infile, outfile)
