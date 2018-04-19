@@ -32,7 +32,8 @@ class EpubVerify(object):
 
     def __init__(self, debug=False):
         self.logger = logging.getLogger(__name__)
-        if debug:
+        self.debug = debug
+        if self.debug:
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
@@ -43,13 +44,14 @@ class EpubVerify(object):
         result = EpubCheck(epub)
         self.results['epubcheck'] = result
 
-        if result.valid:
-            self.logger.info("EpubCheck passed")
-        else:
-            self.logger.info("EpubCheck failed")
-            print("EpubCheck result: {}\n{}".format(
-                result.valid,
-                pformat(result.messages),
-            ))
+        if self.debug:
+            if result.valid:
+                self.logger.info("EpubCheck passed")
+            else:
+                self.logger.info("EpubCheck failed")
+                print("EpubCheck result: {}\n{}".format(
+                    result.valid,
+                    pformat(result.messages),
+                ))
 
         return result
