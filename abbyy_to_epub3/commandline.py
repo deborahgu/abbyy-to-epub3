@@ -19,7 +19,7 @@
 import argparse
 import logging
 
-from abbyy_to_epub3 import create_epub
+from abbyy_to_epub3.create_epub import Ebook
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +63,10 @@ def main():
     )
     parser.add_argument(
         '--epubcheck',
-        default=False,
-        action='store_true',
-        help='Run EpubCheck on the newly created EPUB',
+        nargs='?',
+        const=Ebook.DEFAULT_EPUBCHECK_LEVEL,
+        help='Run EpubCheck on the newly created EPUB. '
+        'Options: `warning` and worse (default), `error` and worse, `fatal` only',
     )
     args = parser.parse_args()
 
@@ -74,12 +75,12 @@ def main():
         if debug:
             logger.addHandler(logging.StreamHandler())
             logger.setLevel(logging.DEBUG)
-        book = create_epub.Ebook(
+        book = Ebook(
             args.item_dir,
             args.item_identifier,
             args.item_bookpath,
             debug=debug,
-            args=args,
+            epubcheck=args.epubcheck,
         )
         book.craft_epub(epub_outfile=args.out or 'out.epub', tmpdir=args.tmpdir)
 
