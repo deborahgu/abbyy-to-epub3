@@ -116,9 +116,11 @@ class Ebook(ArchiveBookItem):
     Ebook is a utility for generating epub3 files based on Archive.org items.
     Holds extracted information about a book & the ebooklib EPUB object.
     """
+    DEFAULT_EPUBCHECK_LEVEL = 'warning'
+
     def __init__(
             self, item_dir, item_identifier, item_bookpath,
-            debug=False, args=False
+            debug=False, epubcheck=None
     ):
 
         self.logger = logging.getLogger(__name__)
@@ -128,7 +130,10 @@ class Ebook(ArchiveBookItem):
 
         # Initialize all the book's variables cleanly
         self.debug = debug
-        self.args = args
+        self.epubcheck = epubcheck or (
+            # If no epubcheck specified and we're in debug mode, run
+            # --epubcheck warning
+            self.DEFAULT_EPUBCHECK_LEVEL if self.debug else None)
         self.metadata = {}     # the book's metadata
         self.blocks = []       # all <blocks> with contents, attributes
         self.paragraphs = {}   # paragraph style info
@@ -1133,21 +1138,25 @@ class Ebook(ArchiveBookItem):
         epub.write_epub(epub_outfile, self.book, {})
 
         # run validation on epub
-        if self.args and self.args.epubcheck:
-            self.validate_epub(epub_outfile)
+        if self.debug or self.epubcheck:
+            self.validate_epub(epub_outfile, level=self.epubcheck)
 
-    def validate_epub(self, epub_file):
+    def validate_epub(self, epub_file, level=None):
         self.logger.debug("Running EpubCheck on {}".format(epub_file))
+        LEVELS = ['warning', 'error', 'fatal']
+        level = level.lower() or self.DEFAULT_EPUBCHECK_LEVEL
+        try:
+            desired_levels = LEVELS[LEVELS.index(level):]
+        except ValueError:
+            self.logger.error(
+                "Invalid --epubcheck level: `%s`.\n" \
+                "Falling back to default: `%s`" % (
+                    level, self.DEFAULT_EPUBCHECK_LEVEL))
+            desired_levels = LEVELS
+
         result = self.verifier.run_epubcheck(epub_file)
-        if not self.debug:
-            # we probably shouldn't hard code this list:
-            exceptions = ['Non-standard image resource of type image/x-ms-bmp found.']
-            errors = [err for err in result.messages if
-                      # filter out warnings (i.e. non errors) if not
-                      # in debug mode
-                      err.level.lower() == 'error' and
-                      # filter our errors whose messages match known /
-                      # approved exceptions
-                      err.message not in exceptions]
-            if errors:
-                raise RuntimeError(errors)
+        errors = [err for err in result.messages if
+                  # only keep desired_levels
+                  err.level.lower() in desired_levels]
+        if errors:
+            raise RuntimeError(errors)
