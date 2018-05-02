@@ -22,6 +22,7 @@ from ebooklib import utils as ebooklib_utils
 from fuzzywuzzy import fuzz
 from numeral import roman2int
 from pkg_resources import resource_filename
+from pprint import pformat
 
 from zipfile import BadZipFile, ZipFile
 
@@ -153,6 +154,9 @@ class Ebook(ArchiveBookItem):
         # ebooklib.epub doesn't clean up cleanly without reset,
         # causing problems on consecutive runs
         self.book.reset()
+
+        # set up the verifier to hold testing results
+        self.verifier = EpubVerify(self.debug)
 
         # Choose the image processing library
         try:
@@ -1102,11 +1106,12 @@ class Ebook(ArchiveBookItem):
             epub_outfile = '%s.epub' % epub_outfile
         epub.write_epub(epub_outfile, self.book, {})
 
-        # run checks
-        verifier = EpubVerify(self.debug)
+        # run epub validation:epubcheck
         if self.args and self.args.epubcheck:
-            self.logger.info("Running EpubCheck on {}".format(epub_outfile))
-            verifier.run_epubcheck(epub_outfile)
-        if self.args and self.args.ace:
-            self.logger.info("Running DAISY Ace on {}".format(epub_outfile))
-            verifier.run_ace(epub_outfile)
+            result, errors = self.verifier.run_validator(
+                epub_outfile,
+                tool='epubcheck'
+            )
+            # raise an error if epubcheck found fatal errors
+            if errors:
+                raise RuntimeError(pformat(errors))
