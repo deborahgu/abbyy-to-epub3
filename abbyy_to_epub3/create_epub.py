@@ -363,7 +363,7 @@ class Ebook(ArchiveBookItem):
         the image HTML
         """
         page_no = block['page_no']
-        if page_no == 1:
+        if page_no == 0:
             # The first page's image is made into the cover automatically
             return
 
@@ -371,9 +371,11 @@ class Ebook(ArchiveBookItem):
         origfile = '{dir}/{item_bookpath}_jp2/{item_bookpath}_{page:0>4}.jp2'.format(
             dir=self.tmpdir,
             item_bookpath=self.item_bookpath,
-            page=block['page_no']
+            page=page_no
         )
-        basefile = 'img_{:0>4}.bmp'.format(self.picnum)
+        if not os.path.isfile(origfile):
+            return
+        basefile = 'img_{:0>4}.png'.format(self.picnum)
         outfile = '{}/{}'.format(self.tmpdir, basefile)
         in_epub_imagefile = 'images/{}'.format(basefile)
 
@@ -982,7 +984,7 @@ class Ebook(ArchiveBookItem):
         # Even if we clean up properly afterwards, using TemporaryDirectory
         # outside of a convtext manager seems to cause a resource leak
         with tempfile.TemporaryDirectory() as self.tmpdir:
-            self.cover_img = '{}/cover.bmp'.format(self.tmpdir)
+            self.cover_img = '{}/cover.png'.format(self.tmpdir)
             self.abbyy_file = "{tmp}/{base}_abbyy".format(
                 tmp=self.tmpdir, base=self.item_identifier
             )
@@ -1034,7 +1036,7 @@ class Ebook(ArchiveBookItem):
 
             # Set the book's cover
             self.book.set_cover(
-                'images/cover.bmp',
+                'images/cover.png',
                 open(self.cover_img, 'rb').read()
             )
             cover = self.book.items[-1]
