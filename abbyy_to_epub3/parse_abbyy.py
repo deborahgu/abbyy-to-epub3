@@ -286,7 +286,7 @@ class AbbyyParser(object):
 
     def parse_content(self):
         """ Parse each page of the book.  """
-        page_no = 1
+        page_no = 0
         d = {'page_no': page_no}
 
         self.pages[0].clear()    # clear the memory first
