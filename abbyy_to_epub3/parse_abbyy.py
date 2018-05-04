@@ -143,12 +143,9 @@ class AbbyyParser(object):
         else:
             self.metadata['PAGES_SUPPORT'] = False
 
-    def is_block_type(self, elem, blocktype):
-        """ Identifies if an XML element is a textblock. """
-        if (
-            elem.tag == "{{{}}}block".format(self.ns) and
-            elem.get("blockType") == blocktype
-           ):
+    def is_block_type(self, blockattr, blocktype):
+        """ Identifies if a block has the given type. """
+        if 'blockType' in blockattr and blockattr['blockType'] == blocktype:
             return True
         else:
             return False
@@ -303,8 +300,11 @@ class AbbyyParser(object):
                 blockattr = block.attrib
                 blockattr['pagewidth'] = pagewidth
                 blockattr['pageheight'] = pageheight
-                if self.is_block_type(block, "Text"):
-                    paras = block.findall(".//a:par", namespaces=self.nsm)
+                if self.is_block_type(blockattr, "Text"):
+                    #paras = block.findall(".//a:par", namespaces=self.nsm)
+                    paras = block.iterdescendants(
+                        tag="{{{}}}par".format(self.ns)
+                    )
                     # Some blocks can have multiple styles in them. We'll treat
                     # those as multiple blocks.
                     for para in paras:
@@ -363,7 +363,7 @@ class AbbyyParser(object):
                         para.clear()  # garbage collection
                     del paras         # garbage collection
 
-                elif self.is_block_type(block, "Table"):
+                elif self.is_block_type(blockattr, "Table"):
                     # We'll process the table by treating each of its cells
                     # subordinate blocks as separate. Keep track of which
                     # is the last element in a cell/row/table, so we can
@@ -376,7 +376,11 @@ class AbbyyParser(object):
                     }
                     self.blocks.append(d)
                     d = dict()
-                    rows = block.findall(".//a:row", namespaces=self.nsm)
+                    #rows = block.findall(".//a:row", namespaces=self.nsm)
+                    # Make the iterator into a list so we can calculate length
+                    # with only one iteration. Should be a small chunk so unlikely
+                    # to be a memory hog.
+                    rows = list(block.iterdescendants(tag="{{{}}}row".format(self.ns)))
                     rows_in_table = len(rows)
                     for row in rows:
                         this_cell = 1
@@ -390,7 +394,10 @@ class AbbyyParser(object):
                         this_row += 1
                         self.blocks.append(d)
                         d = dict()
-                        cells = row.findall("a:cell", namespaces=self.nsm)
+                        #cells = row.findall("a:cell", namespaces=self.nsm)
+                        cells = list(row.iterdescendants(
+                            tag="{{{}}}cell".format(self.ns)
+                        ))
                         cells_in_row = len(cells)
                         for cell in cells:
                             this_contents = 1
@@ -408,14 +415,17 @@ class AbbyyParser(object):
                             # text.
                             # The layout is cell -> text -> par.
                             text = cell.find("a:text", namespaces=self.nsm)
-                            paras = text.findall("a:par", namespaces=self.nsm)
+                            # paras = text.findall("a:par", namespaces=self.nsm)
+                            paras = list(text.iterdescendants(
+                                tag="{{{}}}par".format(self.ns)
+                            ))
                             paras_in_cell = len(paras)
                             for para in paras:
                                 para_id = para.get("style")
                                 text = gettext(para).strip()
                                 # Ignore whitespace-only para unless it's
                                 # an empty cell. If so, placeholder
-                                if not text and len(paras) > 1:
+                                if not text and paras_in_cell > 1:
                                     continue
                                 d = {
                                     'type': 'TableText',
@@ -430,6 +440,9 @@ class AbbyyParser(object):
                                 d = dict()
                                 if newpage:
                                     newpage = False
+                                para.clear()
+                            del paras
+                            del text
                             cell.clear()        # garbage collection
                         del cells               # garbage collection
                         row.clear()             # garbage collection
@@ -445,7 +458,7 @@ class AbbyyParser(object):
 
                     # If this is an image, add it to a dict of all images
                     # by page number, so we can strip out overlapping images
-                    if self.is_block_type(block, "Picture"):
+                    if self.is_block_type(blockattr, "Picture"):
                         if page_no in self.metadata['pics_by_page']:
                             self.metadata['pics_by_page'].append(d)
                         else:

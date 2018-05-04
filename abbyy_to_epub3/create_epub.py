@@ -1022,9 +1022,12 @@ class Ebook(ArchiveBookItem):
                 self.progression = direction[
                     self.metadata['page-progression'][0]
                 ]
+                self.book.set_direction(self.progression)
             else:
-                self.progression = 'default'
-            self.book.set_direction(self.progression)
+                # The epub, used in the spine, uses 'default' for unspecified
+                # direction. HTML, used in the content pages, uses 'auto'.
+                self.progression = 'auto'
+                self.book.set_direction('default')
 
             # get the finereader version
             if 'fr-version' in self.metadata:
