@@ -19,7 +19,6 @@
 from ebooklib import utils as ebooklibutils
 from lxml import etree
 
-from copy import deepcopy
 import gc
 import logging
 
@@ -53,12 +52,31 @@ class AbbyyParser(object):
     The ABBYY parser object.
     Parses ABBYY metadata in preparation for import into an EPUB 3 document.
 
-    Here are the components of the ABBYY schema we use:
+    And ABBYY document begins with a font and style information:
+
+    .. code:: html
+
+        <documentData>
+          <paragraphStyles>
+            <paragraphStyle
+              id="{idnum}" name="stylename"
+              mainFontStyleId="{idnum}" [style info]>
+            <fontStyle id="{idnum}" [style info]>
+          </paragraphStyle>
+          [more styles]
+        </documentData>
+
+    This is followed by the data for the pages.
 
     .. code:: html
 
         <page>
-            <block>types Picture, Separator, Table, or Text</block>
+            <block></block>
+            [more blocks]
+        </page>
+
+
+    Blocks have types. We process types Text, Picture, and Table.
 
     Text:
 
@@ -72,8 +90,8 @@ class AbbyyParser(object):
                         <formatting>
                         <charParams>: The individual character
 
-    Image:
-    Separator:
+    Picture: we know the corresponding scan (page) number, & coordinates.
+
     Table:
 
     .. code:: html
@@ -83,8 +101,16 @@ class AbbyyParser(object):
                 <text>
                   <par>
 
-    Each paragraph has an identifier, which has a unique style, including
+    Each `<par>` has an identifier, which has a unique style, including
     the paragraph's role, eg:
+
+    .. code:: html
+
+                <par align="Right" lineSpacing="1790"
+                    style="{000000DD-016F-0A36-032F-EEBBD9B8571E}">
+
+
+    This corresponds to a paragraphStyle from the `<documentData>` element:
 
     .. code:: html
 
@@ -92,13 +118,8 @@ class AbbyyParser(object):
                     id="{000000DD-016F-0A36-032F-EEBBD9B8571E}"
                     name="Heading #1|1"
                     mainFontStyleId="{000000DE-016F-0A37-032F-176E5F6405F5}"
-                    role="heading"
-                    roleLevel="1"
-                    align="Right"
-                    startIndent="0" leftIndent="0"
-                    rightIndent="0" lineSpacing="1790" fixedLineSpacing="1">
-               <par align="Right" lineSpacing="1790"
-                    style="{000000DD-016F-0A36-032F-EEBBD9B8571E}">
+                    role="heading" roleLevel="1"
+                    [style information]>
 
     The roles map as follows:
 
@@ -136,6 +157,7 @@ class AbbyyParser(object):
         self.metadata = metadata
         self.paragraphs = paragraphs
         self.blocks = blocks
+        self.page_no = 0
 
         # Save page numbers only if using a supporting version of ebooklib
         if 'create_pagebreak' in dir(ebooklibutils):
@@ -149,67 +171,6 @@ class AbbyyParser(object):
             return True
         else:
             return False
-
-    def parse_abbyy(self):
-        """
-        Parse the ABBYY into a format useful for create_epub
-        """
-
-        # some basic initialization
-        self.metadata['pics_by_page'] = dict()
-        self.fontStyles = dict()
-        self.pages = []
-
-        # Be aggressive with garbage collection; parsing the XML hogs memory
-        gc.set_threshold(1, 1, 1)
-
-        # Get the namespace & the FR version, so we can find the other elements
-        self.find_namespace()
-
-        ###
-        # Now we find the elements we will need to construct the EPUB:
-        # paragraphStyle, fontStyle, and page.
-        # These are broken out into individual chunks after which we clean up,
-        # because parsing the XML is a memory hog.
-        ###
-
-        # fontStyle is a prerequisite for getting paragraphStyle correct
-        context = etree.iterparse(
-            self.document,
-            events=('end',),
-            tag="{{{}}}fontStyle".format(self.ns),
-        )
-        fast_iter(context, self.decompose_xml)
-        del context
-
-        # paragraphStyle is a prerequisite for page
-        context = etree.iterparse(
-            self.document,
-            events=('end',),
-            tag="{{{}}}paragraphStyle".format(self.ns),
-        )
-        fast_iter(context, self.decompose_xml)
-        del context
-
-        # parse the metadata document next
-        self.parse_metadata()
-
-        # finally, extract the individual page elements from the XML
-        context = etree.iterparse(
-            self.document,
-            events=('end',),
-            tag="{{{}}}page".format(self.ns),
-        )
-        fast_iter(context, self.decompose_xml)
-        del context
-
-        # once we have the elements we can build our data structures
-        # to create the EPUB
-        self.parse_content()
-
-        # if we don't clear the list, the page elements will stick around
-        # even after the list's scope has vanished, leaking memory
-        self.pages.clear()
 
     def find_namespace(self):
         """
@@ -238,250 +199,6 @@ class AbbyyParser(object):
             else:
                 return
 
-    def decompose_xml(self, elem):
-        """
-        iteratively parse the ABBYY file into data structures
-        so that intelligent parsing can happen later.
-        The ABBYY seems to be sometimes inconsistent about whether these
-        elements have a namespace, so be forgiving.
-        """
-
-        if (
-            elem.tag == "{{{}}}fontStyle".format(self.ns) or
-            elem.tag == "fontStyle"
-        ):
-            self.fontStyles[elem.get("id")] = dict(elem.attrib)
-        elif (
-            elem.tag == "{{{}}}paragraphStyle".format(self.ns) or
-            elem.tag == "paragraphStyle"
-        ):
-            """
-            Paragraph styles are on their own at the start of the ABBYY
-            and refer to sibling fontStyle elements
-            """
-            id = elem.get("id")
-            attribs = dict(elem.attrib)
-            self.paragraphs[id] = attribs
-            if (
-                'mainFontStyleId' in attribs and
-                'mainFontStyleId' in self.fontStyles
-            ):
-                    self.paragraphs[id]['fontstyle'] = self.fontStyles[
-                        'mainFontStyleId'
-                    ]
-
-        elif (
-            elem.tag == "{{{}}}page".format(self.ns) or
-            elem.tag == "page"
-        ):
-            self.pages.append(deepcopy(elem))
-        else:
-            return
-
-        # only garbage collect if we have found & processed a node
-        elem.clear()
-
-    def parse_content(self):
-        """ Parse each page of the book.  """
-        page_no = 0
-        d = {'page_no': page_no}
-
-        self.pages[0].clear()    # clear the memory first
-        for page in self.pages:
-            pagewidth = page.get('width')
-            pageheight = page.get('height')
-            block_per_page = page.getchildren()
-            if not block_per_page:
-                page_no += 1
-                continue
-            newpage = True
-
-            for block in block_per_page:
-                blockattr = block.attrib
-                blockattr['pagewidth'] = pagewidth
-                blockattr['pageheight'] = pageheight
-                if self.is_block_type(blockattr, "Text"):
-                    #paras = block.findall(".//a:par", namespaces=self.nsm)
-                    paras = block.iterdescendants(
-                        tag="{{{}}}par".format(self.ns)
-                    )
-                    # Some blocks can have multiple styles in them. We'll treat
-                    # those as multiple blocks.
-                    for para in paras:
-                        # Get the paragraph style and text
-                        para_id = para.get("style")
-                        if para_id not in self.paragraphs:
-                            self.logger.info(
-                                'Block {} has no paragraphStyle'.format(
-                                    para_id
-                                )
-                            )
-                            self.paragraphs[para_id] = dict()
-                        text = gettext(para).strip()
-
-                        # Ignore whitespace-only pars
-                        if not text:
-                            continue
-
-                        # Get the paragraph role
-                        # FR6 docs have no structure, styles, roles
-                        if self.version == "FR10":
-                            role = self.paragraphs[para_id]['role']
-                        else:
-                            role = "FR6"
-
-                        # Skip headers and footers
-                        if role == 'rt':
-                            continue
-
-                        # This is a good text chunk. Instantiate the block.
-                        # The modern ABBYY parser is consistent in its handling
-                        # of EOL hyphens, making it safe to strip them.
-                        d = {
-                            'type': 'Text',
-                            'page_no': page_no,
-                            'text': sanitize_xml(text).replace('¬\n', ''),
-                            'role': role,
-                            'style': self.paragraphs[para_id]
-                        }
-
-                        # To help with unmarked header recognition
-                        if newpage:
-                            d['first'] = True
-                            newpage = False
-
-                        # Mark up heading level
-                        if role == 'heading':
-                            level = self.paragraphs[para_id]['roleLevel']
-                            # shortcut so we need fewer lookups later
-                            d['heading'] = level
-
-                        # Whenever you append to the list, re-instantiate
-                        self.blocks.append(d)
-                        d = dict()
-
-                        para.clear()  # garbage collection
-                    del paras         # garbage collection
-
-                elif self.is_block_type(blockattr, "Table"):
-                    # We'll process the table by treating each of its cells
-                    # subordinate blocks as separate. Keep track of which
-                    # is the last element in a cell/row/table, so we can
-                    # close the elements after each is complete.
-                    this_row = 1
-                    d = {
-                        'type': 'Table',
-                        'style': blockattr,
-                        'page_no': page_no,
-                    }
-                    self.blocks.append(d)
-                    d = dict()
-                    #rows = block.findall(".//a:row", namespaces=self.nsm)
-                    # Make the iterator into a list so we can calculate length
-                    # with only one iteration. Should be a small chunk so unlikely
-                    # to be a memory hog.
-                    rows = list(block.iterdescendants(tag="{{{}}}row".format(self.ns)))
-                    rows_in_table = len(rows)
-                    for row in rows:
-                        this_cell = 1
-                        d = {
-                            'type': 'TableRow',
-                            'style': blockattr,
-                            'page_no': page_no,
-                        }
-                        if this_row == rows_in_table:
-                            d['last_table_elem'] = True
-                        this_row += 1
-                        self.blocks.append(d)
-                        d = dict()
-                        #cells = row.findall("a:cell", namespaces=self.nsm)
-                        cells = list(row.iterdescendants(
-                            tag="{{{}}}cell".format(self.ns)
-                        ))
-                        cells_in_row = len(cells)
-                        for cell in cells:
-                            this_contents = 1
-                            d = {
-                                'type': 'TableCell',
-                                'style': blockattr,
-                                'page_no': page_no,
-                            }
-                            if this_cell == cells_in_row:
-                                d['last_table_elem'] = True
-                            this_cell += 1
-                            self.blocks.append(d)
-                            d = dict()
-                            # Parsing a cell is not quite like parsing regular
-                            # text.
-                            # The layout is cell -> text -> par.
-                            text = cell.find("a:text", namespaces=self.nsm)
-                            # paras = text.findall("a:par", namespaces=self.nsm)
-                            paras = list(text.iterdescendants(
-                                tag="{{{}}}par".format(self.ns)
-                            ))
-                            paras_in_cell = len(paras)
-                            for para in paras:
-                                para_id = para.get("style")
-                                text = gettext(para).strip()
-                                # Ignore whitespace-only para unless it's
-                                # an empty cell. If so, placeholder
-                                if not text and paras_in_cell > 1:
-                                    continue
-                                d = {
-                                    'type': 'TableText',
-                                    'style': blockattr,
-                                    'page_no': page_no,
-                                    'text': sanitize_xml(text),
-                                }
-                                if this_contents == paras_in_cell:
-                                    d['last_table_elem'] = True
-                                this_contents += 1
-                                self.blocks.append(d)
-                                d = dict()
-                                if newpage:
-                                    newpage = False
-                                para.clear()
-                            del paras
-                            del text
-                            cell.clear()        # garbage collection
-                        del cells               # garbage collection
-                        row.clear()             # garbage collection
-                    del rows                    # garbage collection
-                else:
-                    # Create entry for non-text blocks with type & attributes
-                    d = {
-                        'type': block.get("blockType"),
-                        'style': blockattr,
-                        'page_no': page_no,
-                    }
-                    self.blocks.append(d)
-
-                    # If this is an image, add it to a dict of all images
-                    # by page number, so we can strip out overlapping images
-                    if self.is_block_type(blockattr, "Picture"):
-                        if page_no in self.metadata['pics_by_page']:
-                            self.metadata['pics_by_page'].append(d)
-                        else:
-                            self.metadata['pics_by_page'] = [d, ]
-
-                    d = dict()
-
-            # Mark up the last text block on the page, if there is one
-            add_last_text(self.blocks, page_no)
-
-            # For accessibility, create a page number at the end of every page
-            if self.metadata['PAGES_SUPPORT']:
-                d = {
-                    'type': 'Page',
-                    'text': page_no,
-                }
-                self.blocks.append(d)
-                d = dict()
-
-            # Set up the next iteration.
-            page_no += 1
-            page.clear()
-
     def parse_metadata(self):
         """
         Parse out the metadata from the _meta.xml file
@@ -499,3 +216,292 @@ class AbbyyParser(object):
         # if the language isn't explicitly set, assume English
         if 'language' not in self.metadata:
             self.metadata['language'] = 'eng'
+
+    def parse_abbyy(self):
+        """
+        Parse the ABBYY into a format useful for `create_epub`. Process the
+        the elements we will need to construct the EPUB: `paragraphStyle`,
+        `fontStyle`, and `page`.  We traverse the entire tree twice with
+        `iterparse`, because lxml builds the whole node tree in memory for even
+        tag-selective `iterparse`, & if we don't traverse the whole tree, we
+        can't delete the unowned nodes. `fast_iter` makes the process speedy,
+        and the dual processing saves on memory. Because of the layout
+        of the elements in the ABBYY file, it's too complex to do this in a
+        single iterative pass.
+        """
+
+        # some basic initialization
+        self.metadata['pics_by_page'] = dict()
+        self.fontStyles = dict()
+        self.pages = []
+
+        # Be aggressive with garbage collection; parsing the XML hogs memory
+        gc.set_threshold(1, 1, 1)
+
+        # Get the namespace & the FR version, so we can find the other elements
+        self.find_namespace()
+
+        # paragraphStyle is a prerequisite for page
+        context = etree.iterparse(
+            self.document,
+            events=('end',),
+        )
+        fast_iter(context, self.process_styles)
+        del context
+
+        # Because of the processing order of XML events, it's efficient
+        # to collect para and font styles upfront & collate it after.
+        for id, attribs in self.paragraphs.items():
+            if (
+                'mainFontStyleId' in attribs and
+                'mainFontStyleId' in self.fontStyles
+            ):
+                    self.paragraphs[id]['fontstyle'] = self.fontStyles[
+                        'mainFontStyleId'
+                    ]
+
+        # parse the metadata document next
+        self.parse_metadata()
+
+        # finally, extract the individual page elements from the XML
+        context = etree.iterparse(
+            self.document,
+            events=('end',),
+            tag="{{{}}}page".format(self.ns),
+        )
+        fast_iter(context, self.process_pages)
+        del context
+
+        # if we don't clear the list, the page elements will stick around
+        # even after the list's scope has vanished, leaking memory
+        self.pages.clear()
+
+    def process_styles(self, elem):
+        """
+        Iteratively parse styles from the ABBYY file into data structures.
+        The ABBYY seems to be sometimes inconsistent about whether these
+        elements have a namespace, so be forgiving.
+        """
+
+        if (
+            elem.tag == "{{{}}}paragraphStyle".format(self.ns) or
+            elem.tag == "paragraphStyle"
+        ):
+            """
+            Paragraph styles are on their own at the start of the ABBYY
+            and contain child fontStyle elements
+            """
+            self.paragraphs[elem.get("id")] = dict(elem.attrib)
+            fontstyles = elem.iterchildren()
+            for fontstyle in fontstyles:
+                self.fontStyles[fontstyle.get("id")] = dict(fontstyle.attrib)
+
+    def process_pages(self, elem):
+        """
+        Iteratively process pages from the ABBYY file. We have to process now
+        rather than copying the pages for later processing, because deepcopying
+        an lxml element replicates the entire tree.
+        The ABBYY seems to be sometimes inconsistent about whether these
+        elements have a namespace, so be forgiving.
+        """
+
+        if (
+            elem.tag == "{{{}}}page".format(self.ns) or
+            elem.tag == "page"
+        ):
+            d = {'page_no': self.page_no}
+
+            self.pagewidth = elem.get('width')
+            self.pageheight = elem.get('height')
+            block_per_page = elem.iterchildren()
+            if not block_per_page:
+                self.page_no += 1
+                return
+            self.newpage = True
+
+            # Most pages have multiple `<block>` elements
+            for block in block_per_page:
+                self.parse_block(block)
+
+            # Mark up the last text block on the page, if there is one
+            add_last_text(self.blocks, self.page_no)
+
+            # For accessibility, create a page number at the end of every page
+            if self.metadata['PAGES_SUPPORT']:
+                d = {
+                    'type': 'Page',
+                    'text': self.page_no,
+                }
+                self.blocks.append(d)
+                d = dict()
+
+            # Set up the next iteration.
+            self.page_no += 1
+
+    def parse_block(self, block):
+        """ Parse a single block on the page.  """
+        blockattr = block.attrib
+        blockattr['pagewidth'] = self.pagewidth
+        blockattr['pageheight'] = self.pageheight
+        if self.is_block_type(blockattr, "Text"):
+            paras = block.iterdescendants(
+                tag="{{{}}}par".format(self.ns)
+            )
+            # Some blocks can have multiple styles in them. We'll treat
+            # those as multiple blocks.
+            for para in paras:
+                # Get the paragraph style and text
+                para_id = para.get("style")
+                if para_id not in self.paragraphs:
+                    self.logger.debug(
+                        'Block {} has no paragraphStyle'.format(
+                            para_id
+                        )
+                    )
+                    self.paragraphs[para_id] = dict()
+                text = gettext(para).strip()
+
+                # Ignore whitespace-only pars
+                if not text:
+                    continue
+
+                # Get the paragraph role
+                # FR6 docs have no structure, styles, roles
+                if self.version == "FR10":
+                    role = self.paragraphs[para_id]['role']
+                else:
+                    role = "FR6"
+
+                # Skip headers and footers
+                if role == 'rt':
+                    continue
+
+                # This is a good text chunk. Instantiate the block.
+                # The modern ABBYY parser is consistent in its handling
+                # of EOL hyphens, making it safe to strip them.
+                d = {
+                    'type': 'Text',
+                    'page_no': self.page_no,
+                    'text': sanitize_xml(text).replace('¬\n', ''),
+                    'role': role,
+                    'style': self.paragraphs[para_id]
+                }
+
+                # To help with unmarked header recognition
+                if self.newpage:
+                    d['first'] = True
+                    self.newpage = False
+
+                # Mark up heading level
+                if role == 'heading':
+                    level = self.paragraphs[para_id]['roleLevel']
+                    # shortcut so we need fewer lookups later
+                    d['heading'] = level
+
+                # Whenever you append to the list, re-instantiate
+                self.blocks.append(d)
+                d = dict()
+
+                para.clear()  # garbage collection
+            del paras         # garbage collection
+
+        elif self.is_block_type(blockattr, "Table"):
+            # We'll process the table by treating each of its cells'
+            # subordinate blocks as separate. Keep track of which  is the last
+            # element in a cell/row/table, so we can close the elements after
+            # each is complete.
+            this_row = 1
+            d = {
+                'type': 'Table',
+                'style': blockattr,
+                'page_no': self.page_no,
+            }
+            self.blocks.append(d)
+            d = dict()
+            # Make the iterator into a list so we can calculate length
+            # with only one iteration. Should be a small chunk so unlikely
+            # to be a memory hog.
+            rows = list(
+                block.iterdescendants(tag="{{{}}}row".format(self.ns))
+            )
+            rows_in_table = len(rows)
+            for row in rows:
+                this_cell = 1
+                d = {
+                    'type': 'TableRow',
+                    'style': blockattr,
+                    'page_no': self.page_no,
+                }
+                if this_row == rows_in_table:
+                    d['last_table_elem'] = True
+                this_row += 1
+                self.blocks.append(d)
+                d = dict()
+                cells = list(row.iterdescendants(
+                    tag="{{{}}}cell".format(self.ns)
+                ))
+                cells_in_row = len(cells)
+                for cell in cells:
+                    this_contents = 1
+                    d = {
+                        'type': 'TableCell',
+                        'style': blockattr,
+                        'page_no': self.page_no,
+                    }
+                    if this_cell == cells_in_row:
+                        d['last_table_elem'] = True
+                    this_cell += 1
+                    self.blocks.append(d)
+                    d = dict()
+                    # Parsing a cell is not quite like parsing text.
+                    # The element layout is cell -> text -> par.
+                    text = cell.find("a:text", namespaces=self.nsm)
+                    paras = list(text.iterdescendants(
+                        tag="{{{}}}par".format(self.ns)
+                    ))
+                    paras_in_cell = len(paras)
+                    for para in paras:
+                        para_id = para.get("style")
+                        text = gettext(para).strip()
+                        # Ignore whitespace-only para unless it's
+                        # an empty cell. If so, placeholder
+                        if not text and paras_in_cell > 1:
+                            continue
+                        d = {
+                            'type': 'TableText',
+                            'style': blockattr,
+                            'page_no': self.page_no,
+                            'text': sanitize_xml(text),
+                        }
+                        if this_contents == paras_in_cell:
+                            d['last_table_elem'] = True
+                        this_contents += 1
+                        self.blocks.append(d)
+                        d = dict()
+                        if self.newpage:
+                            self.newpage = False
+                        para.clear()
+                    del paras
+                    del text
+                    cell.clear()        # garbage collection
+                del cells               # garbage collection
+                row.clear()             # garbage collection
+            del rows                    # garbage collection
+        else:
+            # Create entry for non-text blocks with type & attributes
+            d = {
+                'type': block.get("blockType"),
+                'style': blockattr,
+                'page_no': self.page_no,
+            }
+            self.blocks.append(d)
+
+            # If this is an image, add it to a dict of all images
+            # by page number, so we can strip out overlapping images
+            if self.is_block_type(blockattr, "Picture"):
+                if self.page_no in self.metadata['pics_by_page']:
+                    self.metadata['pics_by_page'].append(d)
+                else:
+                    self.metadata['pics_by_page'] = [d, ]
+
+            d = dict()
