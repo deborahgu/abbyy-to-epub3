@@ -309,8 +309,6 @@ class AbbyyParser(object):
             elem.tag == "{{{}}}page".format(self.ns) or
             elem.tag == "page"
         ):
-            d = {'page_no': self.page_no}
-
             self.pagewidth = elem.get('width')
             self.pageheight = elem.get('height')
             block_per_page = elem.iterchildren()
@@ -327,13 +325,15 @@ class AbbyyParser(object):
             add_last_text(self.blocks, self.page_no)
 
             # For accessibility, create a page number at the end of every page
-            if self.metadata['PAGES_SUPPORT']:
-                d = {
+            # with content.
+            if (
+                self.metadata['PAGES_SUPPORT'] and
+                self.blocks[-1]['type'] != 'Page'
+            ):
+                self.blocks.append({
                     'type': 'Page',
                     'text': self.page_no,
-                }
-                self.blocks.append(d)
-                d = dict()
+                })
 
             # Set up the next iteration.
             self.page_no += 1
@@ -379,28 +379,24 @@ class AbbyyParser(object):
                 # This is a good text chunk. Instantiate the block.
                 # The modern ABBYY parser is consistent in its handling
                 # of EOL hyphens, making it safe to strip them.
-                d = {
+                self.blocks.append({
                     'type': 'Text',
                     'page_no': self.page_no,
                     'text': sanitize_xml(text).replace('¬\n', ''),
                     'role': role,
-                    'style': self.paragraphs[para_id]
-                }
+                    'style': self.paragraphs[para_id],
+                })
 
                 # To help with unmarked header recognition
                 if self.newpage:
-                    d['first'] = True
+                    self.blocks[-1]['first'] = True
                     self.newpage = False
 
                 # Mark up heading level
                 if role == 'heading':
                     level = self.paragraphs[para_id]['roleLevel']
                     # shortcut so we need fewer lookups later
-                    d['heading'] = level
-
-                # Whenever you append to the list, re-instantiate
-                self.blocks.append(d)
-                d = dict()
+                    self.blocks[-1]['heading'] = level
 
                 para.clear()  # garbage collection
             del paras         # garbage collection
@@ -411,13 +407,11 @@ class AbbyyParser(object):
             # element in a cell/row/table, so we can close the elements after
             # each is complete.
             this_row = 1
-            d = {
+            self.blocks.append({
                 'type': 'Table',
                 'style': blockattr,
                 'page_no': self.page_no,
-            }
-            self.blocks.append(d)
-            d = dict()
+            })
             # Make the iterator into a list so we can calculate length
             # with only one iteration. Should be a small chunk so unlikely
             # to be a memory hog.
@@ -427,32 +421,28 @@ class AbbyyParser(object):
             rows_in_table = len(rows)
             for row in rows:
                 this_cell = 1
-                d = {
+                self.blocks.append({
                     'type': 'TableRow',
                     'style': blockattr,
                     'page_no': self.page_no,
-                }
+                })
                 if this_row == rows_in_table:
-                    d['last_table_elem'] = True
+                    self.blocks[-1]['last_table_elem'] = True
                 this_row += 1
-                self.blocks.append(d)
-                d = dict()
                 cells = list(row.iterdescendants(
                     tag="{{{}}}cell".format(self.ns)
                 ))
                 cells_in_row = len(cells)
                 for cell in cells:
                     this_contents = 1
-                    d = {
+                    self.blocks.append({
                         'type': 'TableCell',
                         'style': blockattr,
                         'page_no': self.page_no,
-                    }
+                    })
                     if this_cell == cells_in_row:
-                        d['last_table_elem'] = True
+                        self.blocks[-1]['last_table_elem'] = True
                     this_cell += 1
-                    self.blocks.append(d)
-                    d = dict()
                     # Parsing a cell is not quite like parsing text.
                     # The element layout is cell -> text -> par.
                     text = cell.find("a:text", namespaces=self.nsm)
@@ -467,17 +457,15 @@ class AbbyyParser(object):
                         # an empty cell. If so, placeholder
                         if not text and paras_in_cell > 1:
                             continue
-                        d = {
+                        self.blocks.append({
                             'type': 'TableText',
                             'style': blockattr,
                             'page_no': self.page_no,
                             'text': sanitize_xml(text),
-                        }
+                        })
                         if this_contents == paras_in_cell:
-                            d['last_table_elem'] = True
+                            self.blocks[-1]['last_table_elem'] = True
                         this_contents += 1
-                        self.blocks.append(d)
-                        d = dict()
                         if self.newpage:
                             self.newpage = False
                         para.clear()
