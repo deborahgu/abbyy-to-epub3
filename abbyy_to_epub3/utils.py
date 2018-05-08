@@ -62,14 +62,15 @@ def gettext(elem):
     return text
 
 
+#@profile
 def fast_iter(context, func):
     """
     Garbage collect as you iterate to save memory
     Based on StackOverflow modification of Liza Daly's fast_iter
     """
     for event, elem in context:
-        func(elem)
         # make sure your function processes any necessary descendants
+        func(elem)
         elem.clear()
         # Also eliminate now-empty references from the root node to elem
         for ancestor in elem.xpath('ancestor-or-self::*'):

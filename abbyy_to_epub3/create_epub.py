@@ -927,9 +927,13 @@ class Ebook(ArchiveBookItem):
                         text=text,
                     )
             elif block['type'] == 'Page':
-                # nest this conditional; we don't want to short circuit if no
-                # pages_support
-                if self.metadata['PAGES_SUPPORT']:
+                # Nest this conditional; we don't want to short circuit if no
+                # pages_support. Check to make sure we're not just repeating
+                # page breaks if the interstital content was omitted.
+                if (
+                    self.metadata['PAGES_SUPPORT'] and
+                    not chapter.content.endswith('epub:type="pagebreak"/>')
+                ):
                     chapter.content += ebooklib_utils.create_pagebreak(
                         str(block['text'])
                     )
@@ -1022,9 +1026,12 @@ class Ebook(ArchiveBookItem):
                 self.progression = direction[
                     self.metadata['page-progression'][0]
                 ]
+                self.book.set_direction(self.progression)
             else:
-                self.progression = 'default'
-            self.book.set_direction(self.progression)
+                # The epub, used in the spine, uses 'default' for unspecified
+                # direction. HTML, used in the content pages, uses 'auto'.
+                self.progression = 'auto'
+                self.book.set_direction('default')
 
             # get the finereader version
             if 'fr-version' in self.metadata:
