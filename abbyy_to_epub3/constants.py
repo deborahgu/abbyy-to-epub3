@@ -1,4 +1,4 @@
-﻿# Copyright 2017 Deborah Kaplan
+# Copyright 2017 Deborah Kaplan
 #
 # This file is part of Abbyy-to-epub3.
 # Source code is available at <https://github.com/deborahgu/abbyy-to-epub3>.
