@@ -34,11 +34,16 @@ class ImageProcessor(object):
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
+    def convert2png(self, original, png, resize):
+        im = Image.open(original)
+        if resize:
+            im = im.resize(resize)
+        im.save(png, 'png')
 
 def factory(type):
 
     class KakaduProcessor(ImageProcessor):
-        def crop_image(self, origfile, outfile, dim=False, pagedim=False):
+        def crop_image(self, origfile, outfile, discard_level=2, dim=False, pagedim=False):
             """
             Given an image object, save a crop of the entire image.
             Convert (left, top, right, bottom) in pixels to the format
@@ -64,6 +69,8 @@ def factory(type):
             cmd_bmp = [
                 'kdu_expand',
                 '-region', region_string,
+                '-reduce', str(discard_level),
+                '-no_seek',
                 '-i', origfile,
                 '-o', outfile + '.bmp'
             ]
@@ -108,6 +115,7 @@ def factory(type):
             pngout, pngerr = p_png.communicate()
             with open(outfile, 'wb') as fh:
                 fh.write(pngout)
+
 
     class PillowProcessor(ImageProcessor):
 

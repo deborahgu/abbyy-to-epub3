@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright 2017 Deborah Kaplan
 #
 # This file is part of Abbyy-to-epub3.
@@ -45,12 +45,3 @@ class TestAbbyyParser(object):
         )
 
         assert verifier.results['epubcheck'].messages[0][0] == 'PKG-012'
-
-    def test_run_ace(self):
-        """ Running EPUBcheck on a good EPUB currently does nothing."""
-        verifier = EpubVerify()
-        verifier.run_ace(
-            "{}/sample.epub".format(TEST_DIR)
-        )
-
-        assert 'ace' not in verifier.results
