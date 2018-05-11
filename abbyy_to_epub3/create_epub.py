@@ -165,12 +165,6 @@ class Ebook(ArchiveBookItem):
 
         super(Ebook, self).__init__(item_dir, item_identifier, item_bookpath)
 
-        self.tmpdir = tempfile.TemporaryDirectory()
-        self.cover_img = '{}/cover.png'.format(self.tmpdir)
-        self.abbyy_file = "{tmp}/{item_identifier}_abbyy".format(
-            tmp=self.tmpdir, item_identifier=self.item_identifier)
-        self.logger.debug("Temp directory: {}\nidentifier: {}".format(
-            self.tmpdir, self.item_identifier))
 
     def load_scandata_pages(self):
         """
