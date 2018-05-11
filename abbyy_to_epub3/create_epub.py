@@ -1077,6 +1077,11 @@ class Ebook(ArchiveBookItem):
             if self.progression == 'default':
                 self.progression = 'auto'
 
+            # `default` is only valid in initial set_direction;
+            # afterwards `auto` is used
+            if self.progression == 'default':
+                self.progression = 'auto'
+
             # get the finereader version
             if 'fr-version' in self.metadata:
                 self.version = self.metadata['fr-version']
