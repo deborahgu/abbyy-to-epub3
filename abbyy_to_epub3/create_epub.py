@@ -396,7 +396,7 @@ class Ebook(ArchiveBookItem):
         the image HTML
         """
         page_no = block['page_no']
-        if page_no == 1:
+        if page_no == 0:
             # The first page's image is made into the cover automatically
             return
 
@@ -404,9 +404,11 @@ class Ebook(ArchiveBookItem):
         origfile = '{dir}/{item_bookpath}_jp2/{item_bookpath}_{page:0>4}.jp2'.format(
             dir=self.tmpdir,
             item_bookpath=self.item_bookpath,
-            page=block['page_no'] -1
+            page=page_no
         )
-        basefile = 'img_{:0>4}.bmp'.format(self.picnum)
+        if not os.path.isfile(origfile):
+            return
+        basefile = 'img_{:0>4}.png'.format(self.picnum)
         outfile = '{}/{}'.format(self.tmpdir, basefile)
         in_epub_imagefile = 'images/{}'.format(basefile)
 
@@ -961,9 +963,13 @@ class Ebook(ArchiveBookItem):
                         text=text,
                     )
             elif block['type'] == 'Page':
-                # nest this conditional; we don't want to short circuit if no
-                # pages_support
-                if self.metadata['PAGES_SUPPORT']:
+                # Nest this conditional; we don't want to short circuit if no
+                # pages_support. Check to make sure we're not just repeating
+                # page breaks if the interstital content was omitted.
+                if (
+                    self.metadata['PAGES_SUPPORT'] and
+                    not chapter.content.endswith('epub:type="pagebreak"/>')
+                ):
                     chapter.content += ebooklib_utils.create_pagebreak(
                         str(block['text'])
                     )
@@ -1059,8 +1065,17 @@ class Ebook(ArchiveBookItem):
                 self.progression = direction[
                     self.metadata['page-progression'][0]
                 ]
+                self.book.set_direction(self.progression)
+            else:
+                # The epub, used in the spine, uses 'default' for unspecified
+                # direction. HTML, used in the content pages, uses 'auto'.
+                self.progression = 'auto'
+                self.book.set_direction('default')
 
-            self.book.set_direction(self.progression)
+            # `default` is only valid in initial set_direction;
+            # afterwards `auto` is used
+            if self.progression == 'default':
+                self.progression = 'auto'
 
             # `default` is only valid in initial set_direction;
             # afterwards `auto` is used

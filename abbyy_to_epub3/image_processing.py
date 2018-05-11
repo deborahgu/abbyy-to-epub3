@@ -46,66 +46,75 @@ def factory(type):
         def crop_image(self, origfile, outfile, discard_level=2, dim=False, pagedim=False):
             """
             Given an image object, save a crop of the entire image.
+            Convert (left, top, right, bottom) in pixels to the format
+            wanted by kakadu: "{<top>,<left>},{<height>,<width>}"
+            as percentages between 0.0 and 1.0.
+            Pagedim is passed as (width, height)
             """
 
-            if dim:
+            if dim and pagedim:
                 # if dimensions are passed, save a crop of the image
-                if pagedim:
-                    """
-                    Convert (left, top, right, bottom) in pixels to the format
-                    wanted by kakadu: "{<top>,<left>},{<height>,<width>}"
-                    as percentages between 0.0 and 1.0.
-                    Pagedim is passed as (width, height)
-                    """
-                    (left, top, right, bottom) = dim
-                    (pagewidth, pageheight) = pagedim
-                    region_string = "{%s,%s},{%s,%s}" % (
-                        top / pageheight,
-                        left / pagewidth,
-                        (bottom - top) / pageheight,
-                        (right - left) / pagewidth
-                    )
-
-                    # kdu_expand has to be run as a subprocess call
-                    cmd = [
-                        'kdu_expand',
-                        '-region', region_string,
-                        '-reduce', str(discard_level),
-                        '-no_seek',
-                        '-i', origfile,
-                        '-o', outfile
-                    ]
-                    try:
-                        subprocess.run(
-                            cmd, stdout=subprocess.DEVNULL, check=True
-                        )
-                        # XXX TODO:
-                        # => 'bmptopnm -quiet | ppmtoppm -quiet'
-                    except subprocess.CalledProcessError as e:
-                        raise RuntimeError(
-                            "Can't save cropped image: {}".format(e)
-                        )
-                else:
-                    raise RuntimeError(
-                        "Can't crop in Kakadu without page dimensions"
-                    )
+                (left, top, right, bottom) = dim
+                (pagewidth, pageheight) = pagedim
+                region_string = "{%s,%s},{%s,%s}" % (
+                    top / pageheight,
+                    left / pagewidth,
+                    (bottom - top) / pageheight,
+                    (right - left) / pagewidth
+                )
             else:
-                # without dimensions, save the entire uncropped image
-                cmd = [
-                    'kdu_expand',
-                    '-reduce', str(discard_level),
-                    '-no_seek',
-                    '-i', origfile,
-                    '-o', outfile
-                ]
-                try:
-                    subprocess.run(
-                        cmd, stdout=subprocess.DEVNULL, check=True
-                    )
-                except subprocess.CalledProcessError as e:
-                    raise RuntimeError(
-                        "Can't open image {}: {}".format(origfile, e)
-                    )
+                region_string = "{0.0,0.0},{1.0,1.0}"
+
+            # kdu_expand has to be run as a subprocess call
+            cmd_bmp = [
+                'kdu_expand',
+                '-region', region_string,
+                '-reduce', str(discard_level),
+                '-no_seek',
+                '-i', origfile,
+                '-o', outfile + '.bmp'
+            ]
+            cmd_pnm = [
+                'bmptopnm', outfile + '.bmp'
+            ]
+            cmd_png = 'pnmtopng'
+            try:
+                subprocess.run(
+                    cmd_bmp, stdout=subprocess.DEVNULL, check=True
+                )
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(
+                    "Can't save cropped image as BMP: {}".format(e)
+                )
+            # We don't always control the filenames of the JP2, so use
+            # subprocess.PIPE, not shell=True, to prevent injection
+            try:
+                p_pnm = subprocess.Popen(
+                    cmd_pnm,
+                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                )
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(
+                    "Can't generate PNM: {}".format(e)
+                )
+            try:
+                p_png = subprocess.Popen(
+                    cmd_png,
+                    stderr=subprocess.DEVNULL,
+                    stdin=p_pnm.stdout,
+                    stdout=subprocess.PIPE,
+                )
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(
+                    "Can't generate PNG: {}".format(e)
+                )
+
+            # Write the PNG from the pipeline into a file
+            # `pnmtopng` only writes to stdout
+            pngout, pngerr = p_png.communicate()
+            with open(outfile, 'wb') as fh:
+                fh.write(pngout)
 
 
     class PillowProcessor(ImageProcessor):
