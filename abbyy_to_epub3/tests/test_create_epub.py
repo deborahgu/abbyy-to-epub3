@@ -27,6 +27,7 @@ from abbyy_to_epub3.settings import TEST_DIR
 
 ITEM_DIR = os.path.join(TEST_DIR, 'item_dir')
 
+
 class TestAbbyyParser(object):
 
     @pytest.fixture

@@ -66,7 +66,7 @@ def main():
         nargs='?',
         const=Ebook.DEFAULT_EPUBCHECK_LEVEL,
         help='Run EpubCheck on the newly created EPUB. '
-        'Options: `warning` and worse (default), `error` and worse, `fatal` only',
+        'Options: `warning` & worse (default), `error` & worse, `fatal` only',
     )
     args = parser.parse_args()
 
@@ -82,7 +82,10 @@ def main():
             debug=debug,
             epubcheck=args.epubcheck,
         )
-        book.craft_epub(epub_outfile=args.out or 'out.epub', tmpdir=args.tmpdir)
+        book.craft_epub(
+            epub_outfile=args.out or 'out.epub', tmpdir=args.tmpdir
+        )
+
 
 if __name__ == "__main__":
     main()
