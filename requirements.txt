@@ -1,4 +1,4 @@
-﻿ebooklib>=0.16
+ebooklib>=0.16
 epubcheck>=0.3.1
 fuzzywuzzy[speedup]>=0.15.1
 lxml>=3.8.0
