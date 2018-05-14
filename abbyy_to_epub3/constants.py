@@ -1,4 +1,4 @@
-﻿# Copyright 2017 Deborah Kaplan
+# Copyright 2017 Deborah Kaplan
 #
 # This file is part of Abbyy-to-epub3.
 # Source code is available at <https://github.com/deborahgu/abbyy-to-epub3>.
@@ -31,7 +31,6 @@ OLD_NSM = {
 # on each block, just use a custom pagetype for anything where
 # "addToAccessFormats" is set to false. This is 'skippable.'
 skippable_pages = [
-    'cover',
     'copyright',
     'color card',
     'skippable',

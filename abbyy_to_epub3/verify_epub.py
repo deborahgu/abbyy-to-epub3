@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import execjs
 import logging
 
 from epubcheck import EpubCheck
@@ -26,13 +25,14 @@ from pprint import pformat
 class EpubVerify(object):
     """
     Provides tools for verifying the quality of the EPUB,
-    using common libraries such as EPUBcheck and DAISY Ace.
+    using common libraries such as EPUBcheck.
     Where sensible, provides tools for automatically parsing the output.
     """
 
     def __init__(self, debug=False):
         self.logger = logging.getLogger(__name__)
-        if debug:
+        self.debug = debug
+        if self.debug:
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
@@ -43,18 +43,14 @@ class EpubVerify(object):
         result = EpubCheck(epub)
         self.results['epubcheck'] = result
 
-        if result.valid:
-            self.logger.info("EpubCheck passed")
-        else:
-            self.logger.info("EpubCheck failed")
-            print("EpubCheck result: {}\n{}".format(
-                result.valid,
-                pformat(result.messages),
-            ))
+        if self.debug:
+            if result.valid:
+                self.logger.info("EpubCheck passed")
+            else:
+                self.logger.info("EpubCheck failed")
+                print("EpubCheck result: {}\n{}".format(
+                    result.valid,
+                    pformat(result.messages),
+                ))
 
         return result
-
-    def run_ace(self, epub):
-        """ Runs DAISY Ace and stores the output. """
-        # Until I can get Ace running, this does nothing
-        pass

@@ -38,7 +38,7 @@ from abbyy_to_epub3.constants import skippable_pages
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
 from abbyy_to_epub3.image_processing import factory as ImageFactory
 from abbyy_to_epub3.parse_scandata import ScandataParser
-from abbyy_to_epub3.utils import dirtify_xml, is_increasing, mkdir_p
+from abbyy_to_epub3.utils import dirtify_xml, is_increasing
 from abbyy_to_epub3.verify_epub import EpubVerify
 
 
@@ -160,7 +160,6 @@ class Ebook(ArchiveBookItem):
         self.book.reset()
         self.verifier = EpubVerify(self.debug)
 
-
         # Choose the image processing library
         try:
             subprocess.run(
@@ -169,9 +168,9 @@ class Ebook(ArchiveBookItem):
             self.image_processor = "kakadu"
         except (FileNotFoundError, subprocess.CalledProcessError) as e:
             self.image_processor = "pillow"
+        self.logger.debug("Image processing with {}.".format(self.image_processor))
 
         super(Ebook, self).__init__(item_dir, item_identifier, item_bookpath)
-
 
     def load_scandata_pages(self):
         """
@@ -348,24 +347,23 @@ class Ebook(ArchiveBookItem):
         http://web.archive.org/web/20180416230000/https://www.safaribooksonline.com/blog/2009/11/20/best-practices-in-epub-cover-images/
         """
         if not self.images_are_extracted():
-            raise RuntimeError('extract_covers cannot be run before extract_images')
+            raise RuntimeError(
+                'extract_covers cannot be run before extract_images'
+            )
 
         # pad out the filename to four digits
         cover_jp2 = "{tmp}/{item_bookpath}_jp2/{item_bookpath}_{num:0>4}.jp2".format(
             tmp=self.tmpdir, item_bookpath=self.item_bookpath, num=self.get_cover_leaf())
-        cover_bmp = '{}/cover.bmp'.format(self.tmpdir)
         cover_png = '{}/cover.png'.format(self.tmpdir)
-        self.logger.debug("jp2: %s & bmp: %s & png: %s" % (
-            cover_jp2, cover_bmp, cover_png))
+        self.logger.debug("jp2: %s & png: %s" % (
+            cover_jp2, cover_png))
 
         # convert the JP2K file into a usable format for the cover
         imageobj = ImageFactory(self.image_processor)
         try:
-            imageobj.crop_image(cover_jp2, cover_bmp)  # jp2 to bmp
-            imageobj.convert2png(
-                # bmp seems to break in ADE and other readers;
-                # convert bmp to png
-                cover_bmp, cover_png, resize=(800, 1200))
+            imageobj.crop_image(
+                cover_jp2, cover_png, resize=(800, 1200)
+            )
         except RuntimeError as e:
             # for failed image creation, keep processing the epub
             self.logger.error(e)
@@ -1023,7 +1021,9 @@ class Ebook(ArchiveBookItem):
 
         # Even if we clean up properly afterwards, using TemporaryDirectory
         # outside of a convtext manager seems to cause a resource leak
-        with tempfile.TemporaryDirectory(dir=mkdir_p(tmpdir)) as self.tmpdir:
+        if tmpdir:
+            tmpdir = os.makedirs(tmpdir, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=tmpdir) as self.tmpdir:
             self.abbyy_file = "{tmp}/{base}_abbyy".format(
                 tmp=self.tmpdir, base=self.item_identifier
             )
@@ -1032,7 +1032,9 @@ class Ebook(ArchiveBookItem):
             # Unzip ABBYY file to disk. (Might be too huge to hold in memory.)
             with gzip.open(self.abbyy_gz, 'rb') as infile:
                 with open(self.abbyy_file, 'wb') as outfile:
-                    self.logger.debug("Abbyy tmp dir: {}".format(self.abbyy_file))
+                    self.logger.debug(
+                        "Abbyy tmp dir: {}".format(self.abbyy_file)
+                    )
                     for line in infile:
                         outfile.write(line)
 
@@ -1060,7 +1062,6 @@ class Ebook(ArchiveBookItem):
                 'rl': 'rtl',
             }
 
-            self.progression = 'default'
             if 'page-progression' in self.metadata:
                 self.progression = direction[
                     self.metadata['page-progression'][0]
@@ -1071,16 +1072,6 @@ class Ebook(ArchiveBookItem):
                 # direction. HTML, used in the content pages, uses 'auto'.
                 self.progression = 'auto'
                 self.book.set_direction('default')
-
-            # `default` is only valid in initial set_direction;
-            # afterwards `auto` is used
-            if self.progression == 'default':
-                self.progression = 'auto'
-
-            # `default` is only valid in initial set_direction;
-            # afterwards `auto` is used
-            if self.progression == 'default':
-                self.progression = 'auto'
 
             # get the finereader version
             if 'fr-version' in self.metadata:
@@ -1164,7 +1155,7 @@ class Ebook(ArchiveBookItem):
             desired_levels = LEVELS[LEVELS.index(level):]
         except ValueError:
             self.logger.error(
-                "Invalid --epubcheck level: `%s`.\n" \
+                "Invalid --epubcheck level: `%s`.\n"
                 "Falling back to default: `%s`" % (
                     level, self.DEFAULT_EPUBCHECK_LEVEL))
             desired_levels = LEVELS

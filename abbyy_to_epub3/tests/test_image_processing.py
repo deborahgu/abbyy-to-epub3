@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright 2017 Deborah Kaplan
 #
 # This file is part of Abbyy-to-epub3.
@@ -65,7 +65,11 @@ class TestImageFactory(object):
         infile = 'input_filename'
         outfile = 'output_filename'
         expected = [
-            'kdu_expand', '-i', 'input_filename', '-o', 'output_filename'
+            'kdu_expand',
+            '-reduce', '2',
+            '-no_seek',
+            '-i', 'input_filename',
+            '-o', 'output_filename'
         ]
 
         test_image.crop_image(infile, outfile)
@@ -88,6 +92,8 @@ class TestImageFactory(object):
         expected = [
             'kdu_expand',
             '-region', '{1.0,1.0},{1.0,2.0}',
+            '-reduce', '2',
+            '-no_seek',
             '-i', 'input_filename',
             '-o', 'output_filename',
         ]
