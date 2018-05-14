@@ -16,11 +16,45 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
+import re
+import codecs
 from setuptools import setup
+
+
+here = os.path.abspath(os.path.dirname(__file__))
+
+
+def read(*parts):
+    """Taken from pypa pip setup.py:
+    intentionally *not* adding an encoding option to open, See:
+    https://github.com/pypa/virtualenv/issues/201#issuecomment-3145690
+    """
+    return codecs.open(os.path.join(here, *parts), 'r').read()
+
+
+def find_version(*file_paths):
+    version_file = read(*file_paths)
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
+                              version_file, re.M)
+    if version_match:
+        return version_match.group(1)
+    raise RuntimeError("Unable to find version string.")
+
+
+def requirements():
+    """Returns requirements.txt as a list usable by setuptools"""
+    here = os.path.abspath(os.path.dirname(__file__))
+    reqtxt = os.path.join(here, u'requirements.txt')
+    with open(reqtxt) as f:
+        return f.read().split()
+
 
 setup(
     name="abbyy_to_epub3",
-    version='1.0',
+    version=find_version("abbyy_to_epub3", "__init__.py"),
+    description='Converts abbyy files to epub3',
+    url='https://github.com/internetarchive/abbyy-to-epub3',
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.3",
@@ -30,31 +64,15 @@ setup(
         "Development Status :: 4 - Beta",
     ],
     keywords='epub abbyy accessibility epub3',
-    python_requires='>=3',
     author='Deborah Kaplan',
+    author_email='deborah.kaplan@suberic.net',
     packages=['abbyy_to_epub3'],
     license='AGPLv3+',
     zip_safe=False,
-
-    install_requires=[
-        'ebooklib',
-        'epubcheck',
-        'fuzzywuzzy',
-        'lxml',
-        'mock',
-        'Pillow',
-        'PyExecJs',
-        'pytest',
-        'numeral',
-        'six',
-        'sphinx',
-        'sphinx-autobuild',
-    ],
-
+    install_requires=requirements(),
     package_data={
-        'abbyy_to_epub3': ['config.ini', ]
+        'abbyy_to_epub3': ['config.ini']
     },
-
     entry_points={
         'console_scripts': ['abbyy2epub=abbyy_to_epub3.commandline:main'],
     }

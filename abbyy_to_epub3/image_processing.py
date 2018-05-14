@@ -38,7 +38,10 @@ class ImageProcessor(object):
 def factory(type):
 
     class KakaduProcessor(ImageProcessor):
-        def crop_image(self, origfile, outfile, dim=False, pagedim=False):
+        def crop_image(
+            self, origfile, outfile,
+            discard_level=2, dim=False, pagedim=False, resize=False,
+        ):
             """
             Given an image object, save a crop of the entire image.
             Convert (left, top, right, bottom) in pixels to the format
@@ -64,6 +67,7 @@ def factory(type):
             cmd_bmp = [
                 'kdu_expand',
                 '-region', region_string,
+                '-reduce', str(discard_level),
                 '-i', origfile,
                 '-o', outfile + '.bmp'
             ]
@@ -109,24 +113,37 @@ def factory(type):
             with open(outfile, 'wb') as fh:
                 fh.write(pngout)
 
+            if resize:
+                im = Image.open(outfile)
+                im.resize(resize)
+                im.save(outfile, 'png')
+
     class PillowProcessor(ImageProcessor):
 
-        def crop_image(self, origfile, outfile, dim=False, pagedim=False):
+        def crop_image(
+            self, origfile, outfile,
+            discard_level=False, dim=False, pagedim=False, resize=False
+        ):
             """
             Given an image object, save a crop or the entire image.
-            Pagedim isn't used for Pillow processing but it's passed anyway
-            because the caller doesn't know which library we use.
+            Pagedim, discard_level aren't used for Pillow processing but
+            the caller doesn't know which library we use.
             """
+
+            try:
+                im = Image.open(origfile)
+            except IOError as e:
+                raise RuntimeError(
+                    "Can't open image {}: {}".format(origfile, e))
+
+            # if no specified new dimensions, use current dimensions.
+            if not resize:
+                resize = im.size
 
             if dim:
                 # if dimensions are passed, save a crop of the image
                 try:
-                    i = Image.open(origfile)
-                except IOError as e:
-                    raise RuntimeError(
-                        "Can't open image {}: {}".format(origfile, e))
-                try:
-                    i.crop(dim).save(outfile)
+                    im.resize(resize).crop(dim).save(outfile)
                 except IOError as e:
                     raise RuntimeError(
                         "Can't crop image {} & save to {}: {}".format(
@@ -136,7 +153,7 @@ def factory(type):
             else:
                 # save the entire image
                 try:
-                    Image.open(origfile).save(outfile)
+                    im.resize(resize).save(outfile)
                 except IOError as e:
                     raise RuntimeError(
                         "Cannot create cover file: {}".format(e)

@@ -19,7 +19,7 @@
 import argparse
 import logging
 
-from abbyy_to_epub3 import create_epub
+from abbyy_to_epub3.create_epub import Ebook
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +51,22 @@ def main():
         ),
     )
     parser.add_argument(
-        '--epubcheck',
-        default=False,
-        action='store_true',
-        help='Run EpubCheck on the newly created EPUB',
+        '-o',
+        '--out',
+        default=None,
+        help='Output path for epub',
     )
     parser.add_argument(
-        '--ace',
-        default=False,
-        action='store_true',
-        help='Run DAISY Ace on the newly created EPUB',
+        '--tmpdir',
+        default=None,
+        help='Specify custom path for tmp abbyy and jp2 files'
+    )
+    parser.add_argument(
+        '--epubcheck',
+        nargs='?',
+        const=Ebook.DEFAULT_EPUBCHECK_LEVEL,
+        help='Run EpubCheck on the newly created EPUB. '
+        'Options: `warning` & worse (default), `error` & worse, `fatal` only',
     )
     args = parser.parse_args()
 
@@ -69,14 +75,16 @@ def main():
         if debug:
             logger.addHandler(logging.StreamHandler())
             logger.setLevel(logging.DEBUG)
-        book = create_epub.Ebook(
+        book = Ebook(
             args.item_dir,
             args.item_identifier,
             args.item_bookpath,
             debug=debug,
-            args=args,
+            epubcheck=args.epubcheck,
         )
-        book.craft_epub()
+        book.craft_epub(
+            epub_outfile=args.out or 'out.epub', tmpdir=args.tmpdir
+        )
 
 
 if __name__ == "__main__":
