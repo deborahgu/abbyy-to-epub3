@@ -37,3 +37,8 @@ skippable_pages = [
     'skippable',
     'title',
 ]
+
+# Don't report these epubcheck exceptions
+epubcheck_exceptions = [
+    'Non-standard image resource of type image/x-ms-bmp found.',
+]

@@ -16,11 +16,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import execjs
 import logging
 
 from epubcheck import EpubCheck
 from pprint import pformat
+
+from abbyy_to_epub3.constants import epubcheck_exceptions
 
 
 class EpubVerify(object):
@@ -32,29 +33,41 @@ class EpubVerify(object):
 
     def __init__(self, debug=False):
         self.logger = logging.getLogger(__name__)
-        if debug:
+        self.debug = debug
+        if self.debug:
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
 
         self.results = {}
 
-    def run_epubcheck(self, epub):
-        """ Runs epubcheck and stores the output. """
-        result = EpubCheck(epub)
-        self.results['epubcheck'] = result
+    def run_validator(self, epub, tool):
+        """
+        Run the appropriate validator, and process errors appropriately.
+        Currently only supports `epubcheck`.
+        """
 
-        if result.valid:
-            self.logger.info("EpubCheck passed")
-        else:
-            self.logger.info("EpubCheck failed")
-            print("EpubCheck result: {}\n{}".format(
-                result.valid,
-                pformat(result.messages),
-            ))
+        if tool == 'epubcheck':
+            self.logger.debug("Running EpubCheck on {}".format(epub))
+            result = EpubCheck(epub)
+            self.results['epubcheck'] = result
+            errors = False
 
-        return result
+            if result.valid:
+                self.logger.debug("EpubCheck passed")
+            else:
+                self.logger.debug("EpubCheck failed")
+                if self.debug:
+                    print("EpubCheck result:\n{}".format(
+                        pformat(result.messages),
+                    ))
+                else:
+                    # if not in debug mode, build a list of critical errors
+                    errors = [
+                        err for err in result.messages if
+                            # filter out warnings
+                            err.level.lower() == 'error' and
+                            # filter out approved exceptions
+                            err.message not in epubcheck_exceptions
+                    ]
 
-    def run_ace(self, epub):
-        """ Runs DAISY Ace and stores the output. """
-        # Until I can get Ace running, this does nothing
-        pass
+            return result, errors
