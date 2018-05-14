@@ -33,11 +33,12 @@ import re
 import subprocess
 import tempfile
 
+from abbyy_to_epub3 import __version__
 from abbyy_to_epub3.constants import skippable_pages
 from abbyy_to_epub3.parse_abbyy import AbbyyParser
 from abbyy_to_epub3.image_processing import factory as ImageFactory
 from abbyy_to_epub3.parse_scandata import ScandataParser
-from abbyy_to_epub3.utils import dirtify_xml, is_increasing
+from abbyy_to_epub3.utils import dirtify_xml, is_increasing, mkdir_p
 from abbyy_to_epub3.verify_epub import EpubVerify
 
 
@@ -83,7 +84,6 @@ class ArchiveBookItem(object):
       Archive Item named `{item_identifier}_meta.xml`.
     - All of the other book specific files follow the form
       `{item_bookpath}_{file}`. e.g. `{item_bookpath}_abbyy.gz`
-
     """
     def __init__(self, item_dir, item_identifier, item_bookpath):
         self.item_dir = item_dir
@@ -116,8 +116,11 @@ class Ebook(ArchiveBookItem):
     Ebook is a utility for generating epub3 files based on Archive.org items.
     Holds extracted information about a book & the ebooklib EPUB object.
     """
+    DEFAULT_EPUBCHECK_LEVEL = 'warning'
+
     def __init__(
-        self, item_dir, item_identifier, item_bookpath, debug=False, args=False
+            self, item_dir, item_identifier, item_bookpath,
+            debug=False, epubcheck=None
     ):
 
         self.logger = logging.getLogger(__name__)
@@ -127,13 +130,16 @@ class Ebook(ArchiveBookItem):
 
         # Initialize all the book's variables cleanly
         self.debug = debug
-        self.args = args
+        self.epubcheck = epubcheck or (
+            # If no epubcheck specified and we're in debug mode, run
+            # --epubcheck warning
+            self.DEFAULT_EPUBCHECK_LEVEL if self.debug else None)
         self.metadata = {}     # the book's metadata
         self.blocks = []       # all <blocks> with contents, attributes
         self.paragraphs = {}   # paragraph style info
+
         self.tmpdir = ''       # stores converted images & extracted zip files
         self.abbyy_file = ''   # the ABBYY XML file
-        self.cover_img = ''    # the name of the cover image
         self.chapters = []     # holds each of the chapter (EpubHtml) objects
         self.progression = ''  # page direction
         self.firsts = {}       # all first lines per-page
@@ -149,10 +155,11 @@ class Ebook(ArchiveBookItem):
         self.table_cell = False
 
         self.book = epub.EpubBook()  # the book itself
-
         # ebooklib.epub doesn't clean up cleanly without reset,
         # causing problems on consecutive runs
         self.book.reset()
+        self.verifier = EpubVerify(self.debug)
+
 
         # Choose the image processing library
         try:
@@ -165,12 +172,6 @@ class Ebook(ArchiveBookItem):
 
         super(Ebook, self).__init__(item_dir, item_identifier, item_bookpath)
 
-        self.tmpdir = tempfile.TemporaryDirectory()
-        self.cover_img = '{}/cover.png'.format(self.tmpdir)
-        self.abbyy_file = "{tmp}/{item_identifier}_abbyy".format(
-            tmp=self.tmpdir, item_identifier=self.item_identifier)
-        self.logger.debug("Temp directory: {}\nidentifier: {}".format(
-            self.tmpdir, self.item_identifier))
 
     def load_scandata_pages(self):
         """
@@ -298,13 +299,32 @@ class Ebook(ArchiveBookItem):
         higher premium than disk space, so unzip the entire scan file into temp
         directory, instead of extracting only the needed images.
         """
+        # extract jp2 images into tmpdir
+        try:
+            with ZipFile(self.jp2_zip) as f:
+                f.extractall(self.tmpdir)
+        except BadZipFile as e:
+            self.logger.error(
+                "extraction problem with {}".format(self.jp2_zip)
+            )
+            raise BadZipFile
 
-        # Try to find a cover image. If nothing is tagged as 'Cover', use
-        # the first page tagged 'Title'. If nothing is tagged as 'Title',
-        # either, use the first page tagged 'Normal'. Self.pages is an
-        # OrderedDict so break as soon as you find something useful, and don't
-        # search the whole set of pages.
+    def images_are_extracted(self):
+        if '.zip' not in self.jp2_zip:
+            raise ValueError('jp2 dir misconfiguration: not a .zip')
+        extracted_dir, _ = os.path.splitext(os.path.join(self.tmpdir, os.path.basename(self.jp2_zip)))
+        self.logger.debug(extracted_dir)
+        return os.path.exists(extracted_dir)
 
+    def get_cover_leaf(self):
+        """
+        Try to find a cover image. If nothing is tagged as 'Cover', use
+        the first page tagged 'Title'. If nothing is tagged as
+        'Title', either, use the first page tagged
+        'Normal'. Self.pages is an OrderedDict so break as soon as you
+        find something useful, and don't search the whole set of
+        pages.
+        """
         pages_iter = iter(self.pages)
         for p in pages_iter:
             if self.pages[p] == 'cover':
@@ -317,32 +337,45 @@ class Ebook(ArchiveBookItem):
                 cover_leaf = p
                 break
         try:
-            cover_leaf
+            return cover_leaf
         except NameError:
             e = "No pages in scandata marked as Cover, Title, or Normal"
             self.logger.error(e)
             raise RuntimeError(e)
 
+    def extract_cover(self):
+        """
+        http://web.archive.org/web/20180416230000/https://www.safaribooksonline.com/blog/2009/11/20/best-practices-in-epub-cover-images/
+        """
+        if not self.images_are_extracted():
+            raise RuntimeError('extract_covers cannot be run before extract_images')
+
         # pad out the filename to four digits
-        cover_file = "{tmp}/{item_bookpath}_jp2/{item_bookpath}_{num:0>4}.jp2".format(
-            tmp=self.tmpdir, item_bookpath=self.item_bookpath, num=cover_leaf
-        )
-        try:
-            with ZipFile(self.jp2_zip) as f:
-                f.extractall(self.tmpdir)
-        except BadZipFile as e:
-            self.logger.error(
-                "extraction problem with {}".format(self.jp2_zip)
-            )
-            raise BadZipFile
+        cover_jp2 = "{tmp}/{item_bookpath}_jp2/{item_bookpath}_{num:0>4}.jp2".format(
+            tmp=self.tmpdir, item_bookpath=self.item_bookpath, num=self.get_cover_leaf())
+        cover_bmp = '{}/cover.bmp'.format(self.tmpdir)
+        cover_png = '{}/cover.png'.format(self.tmpdir)
+        self.logger.debug("jp2: %s & bmp: %s & png: %s" % (
+            cover_jp2, cover_bmp, cover_png))
+
         # convert the JP2K file into a usable format for the cover
-        f, e = os.path.splitext(os.path.basename(cover_file))
         imageobj = ImageFactory(self.image_processor)
         try:
-            imageobj.crop_image(cover_file, self.cover_img)
+            imageobj.crop_image(cover_jp2, cover_bmp)  # jp2 to bmp
+            imageobj.convert2png(
+                # bmp seems to break in ADE and other readers;
+                # convert bmp to png
+                cover_bmp, cover_png, resize=(800, 1200))
         except RuntimeError as e:
             # for failed image creation, keep processing the epub
             self.logger.error(e)
+
+        self.book.set_cover(
+            'images/cover.png', open(cover_png, 'rb').read())
+        cover = self.book.items[-1]
+        self.logger.debug(cover)
+        cover.add_link(
+            href='style/style.css', rel='stylesheet', type='text/css')
 
     def image_dim(self, block):
         """
@@ -642,8 +675,10 @@ class Ebook(ArchiveBookItem):
         for title in self.metadata['title']:
             self.book.set_title(title)
         if 'creator' in self.metadata:
-            for creator in self.metadata['creator']:
-                self.book.add_author(creator)
+            creator_uid = 'creator'
+            for i, creator in enumerate(self.metadata['creator']):
+                self.book.add_author(creator, uid=creator_uid)
+                creator_uid = 'creator_{creator_uid}'.format(creator_uid=i)
         if 'description' in self.metadata:
             for description in self.metadata['description']:
                 self.book.add_metadata('DC', 'description', description)
@@ -771,8 +806,9 @@ class Ebook(ArchiveBookItem):
             'includes texts, audio, moving images, '
             'and software as well as archived web pages, and provides '
             'specialized services for information access for the blind and '
-            'other persons with disabilities.</p></div>'
-        )
+            'other persons with disabilities.</p>'
+            '<p>Created with abbyy2epub (v.%s)</p></div>'
+        ) % __version__
 
         for block in self.blocks:
             blocks_index += 1
@@ -982,13 +1018,12 @@ class Ebook(ArchiveBookItem):
                     )
                 )
 
-    def craft_epub(self, epub_outfile="out.epub"):
+    def craft_epub(self, epub_outfile="out.epub", tmpdir=None):
         """ Assemble the extracted metadata & text into an EPUB  """
 
         # Even if we clean up properly afterwards, using TemporaryDirectory
         # outside of a convtext manager seems to cause a resource leak
-        with tempfile.TemporaryDirectory() as self.tmpdir:
-            self.cover_img = '{}/cover.png'.format(self.tmpdir)
+        with tempfile.TemporaryDirectory(dir=mkdir_p(tmpdir)) as self.tmpdir:
             self.abbyy_file = "{tmp}/{base}_abbyy".format(
                 tmp=self.tmpdir, base=self.item_identifier
             )
@@ -997,6 +1032,7 @@ class Ebook(ArchiveBookItem):
             # Unzip ABBYY file to disk. (Might be too huge to hold in memory.)
             with gzip.open(self.abbyy_gz, 'rb') as infile:
                 with open(self.abbyy_file, 'wb') as outfile:
+                    self.logger.debug("Abbyy tmp dir: {}".format(self.abbyy_file))
                     for line in infile:
                         outfile.write(line)
 
@@ -1005,6 +1041,7 @@ class Ebook(ArchiveBookItem):
 
             # Extract the page images and create the cover file
             self.extract_images()
+            self.extract_cover()
 
             # parse the ABBYY
             parser = AbbyyParser(
@@ -1022,6 +1059,8 @@ class Ebook(ArchiveBookItem):
                 'lr': 'ltr',
                 'rl': 'rtl',
             }
+
+            self.progression = 'default'
             if 'page-progression' in self.metadata:
                 self.progression = direction[
                     self.metadata['page-progression'][0]
@@ -1033,6 +1072,16 @@ class Ebook(ArchiveBookItem):
                 self.progression = 'auto'
                 self.book.set_direction('default')
 
+            # `default` is only valid in initial set_direction;
+            # afterwards `auto` is used
+            if self.progression == 'default':
+                self.progression = 'auto'
+
+            # `default` is only valid in initial set_direction;
+            # afterwards `auto` is used
+            if self.progression == 'default':
+                self.progression = 'auto'
+
             # get the finereader version
             if 'fr-version' in self.metadata:
                 self.version = self.metadata['fr-version']
@@ -1040,16 +1089,6 @@ class Ebook(ArchiveBookItem):
             # make the HTML chapters
             self.craft_html()
             self.logger.debug("Done assembling the HTML")
-
-            # Set the book's cover
-            self.book.set_cover(
-                'images/cover.png',
-                open(self.cover_img, 'rb').read()
-            )
-            cover = self.book.items[-1]
-            cover.add_link(
-                href='style/style.css', rel='stylesheet', type='text/css'
-            )
 
         # Set the book's metadata
         self.set_metadata()
@@ -1065,38 +1104,40 @@ class Ebook(ArchiveBookItem):
         self.book.spine = ['cover', 'nav', ] + self.chapters
 
         # define CSS style
-        style = """.center {text-align: center}
-                .sr-only {
-                    position: absolute;
-                    width: 1px;
-                    height: 1px;
-                    padding: 0;
-                    margin: -1px;
-                    overflow: hidden;
-                    clip: rect(0,0,0,0);
-                    border: 0;
-                }
-                .strong {font-weight: bold;}
-                .italic {font-style: italic;}
-                .serif {font-family: serif;}
-                .sans {font-family: sans-serif;}
-                .big {font-size: 1.5em;}
-                .small {font-size: .75em;}
-                .offset {
-                    margin: 1em;
-                    padding: 1.5em;
-                    border: black 1px solid;
-                }
-                img {
-                    padding: 0;
-                    margin: 0;
-                    max-width: 100%;
-                    max-height: 100%;
-                    column-count: 1;
-                    break-inside: avoid;
-                    oeb-column-number: 1;
-                }
-                """
+        style = """
+            .center {text-align: center}
+            .sr-only {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0,0,0,0);
+                border: 0;
+            }
+            .strong {font-weight: bold;}
+            .italic {font-style: italic;}
+            .serif {font-family: serif;}
+            .sans {font-family: sans-serif;}
+            .big {font-size: 1.5em;}
+            .small {font-size: .75em;}
+            .offset {
+                margin: 1em;
+                padding: 1.5em;
+                border: black 1px solid;
+            }
+            img {
+                padding: 0;
+                margin: 0;
+                max-width: 100%;
+                max-height: 100%;
+                column-count: 1;
+                break-inside: avoid;
+                oeb-column-number: 1;
+            }
+            """
+
         css_file = epub.EpubItem(
             uid="style_nav",
             file_name="style/style.css",
@@ -1111,11 +1152,26 @@ class Ebook(ArchiveBookItem):
             epub_outfile = '%s.epub' % epub_outfile
         epub.write_epub(epub_outfile, self.book, {})
 
-        # run checks
-        verifier = EpubVerify(self.debug)
-        if self.args and self.args.epubcheck:
-            self.logger.info("Running EpubCheck on {}".format(epub_outfile))
-            verifier.run_epubcheck(epub_outfile)
-        if self.args and self.args.ace:
-            self.logger.info("Running DAISY Ace on {}".format(epub_outfile))
-            verifier.run_ace(epub_outfile)
+        # run validation on epub
+        if self.debug or self.epubcheck:
+            self.validate_epub(epub_outfile, level=self.epubcheck)
+
+    def validate_epub(self, epub_file, level=None):
+        self.logger.debug("Running EpubCheck on {}".format(epub_file))
+        LEVELS = ['warning', 'error', 'fatal']
+        level = level.lower() or self.DEFAULT_EPUBCHECK_LEVEL
+        try:
+            desired_levels = LEVELS[LEVELS.index(level):]
+        except ValueError:
+            self.logger.error(
+                "Invalid --epubcheck level: `%s`.\n" \
+                "Falling back to default: `%s`" % (
+                    level, self.DEFAULT_EPUBCHECK_LEVEL))
+            desired_levels = LEVELS
+
+        result = self.verifier.run_epubcheck(epub_file)
+        errors = [err for err in result.messages if
+                  # only keep desired_levels
+                  err.level.lower() in desired_levels]
+        if errors:
+            raise RuntimeError(errors)
