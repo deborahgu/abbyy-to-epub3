@@ -107,7 +107,7 @@ You can rebuild the documentation, which is generated with Sphinx.
    cd docs
    make html
 
-Deploying
+Deploying at the Internet Archive
 ===================
 
 Before deploying, make sure you bump the version of the package in `__init__.py`. Then, run the `upload.sh` script in the root of the repository and enter the appropriate Internet Archive credentials when prompted.

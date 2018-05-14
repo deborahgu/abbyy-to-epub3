@@ -276,35 +276,7 @@ class AbbyyParser(object):
         # even after the list's scope has vanished, leaking memory
         self.pages.clear()
 
-
-    def find_namespace(self):
-        """
-        find the namespace of an XML document. Assumes that the namespace of
-        the first element in the context is the namespace we need. This is more
-        memory-efficient then parsing the entire tree to get the root node.
-        """
-        context = etree.iterparse(self.document, events=('start',),)
-        for event, elem in context:
-            # Namespace depends on finereader version.
-            # We can parse FR6 schema, a little
-            if not self.version:
-                abbyy_nsm = elem.nsmap
-                if constants.ABBYY_NS in abbyy_nsm.values():
-                    self.nsm = constants.ABBYY_NSM
-                    self.ns = constants.ABBYY_NS
-                    self.version = "FR10"
-                elif constants.OLD_NS in abbyy_nsm.values():
-                    self.nsm = constants.OLD_NSM
-                    self.ns = constants.OLD_NS
-                    self.version = "FR6"
-                else:
-                    raise RuntimeError("Input XML not in a supported schema.")
-                self.logger.debug("FineReader Version {}".format(self.version))
-                self.metadata['fr-version'] = self.version
-            else:
-                return
-
-    def decompose_xml(self, elem):
+    def process_styles(self, elem):
         """
         Iteratively parse styles from the ABBYY file into data structures.
         The ABBYY seems to be sometimes inconsistent about whether these
