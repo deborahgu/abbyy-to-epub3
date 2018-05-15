@@ -66,10 +66,10 @@ class TestImageFactory(object):
         outfile = 'output_filename'
         expected = [
             'kdu_expand',
+            '-region', '{0.0,0.0},{1.0,1.0}',
             '-reduce', '2',
-            '-no_seek',
             '-i', 'input_filename',
-            '-o', 'output_filename'
+            '-o', 'output_filename.bmp',
         ]
 
         test_image.crop_image(infile, outfile)
@@ -93,9 +93,8 @@ class TestImageFactory(object):
             'kdu_expand',
             '-region', '{1.0,1.0},{1.0,2.0}',
             '-reduce', '2',
-            '-no_seek',
             '-i', 'input_filename',
-            '-o', 'output_filename',
+            '-o', 'output_filename.bmp',
         ]
 
         test_image.crop_image(infile, outfile, dim=dim, pagedim=pagedim)

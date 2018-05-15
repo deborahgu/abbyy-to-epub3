@@ -106,17 +106,59 @@ class TestAbbyyParser(object):
         ) in book.chapters[1].content
         assert book.chapters[1].file_name == 'chap_0002.xhtml'
 
-    def test_make_chapter(self, metadata, book):
+    def test_make_chapters(self, metadata, book):
         """
-        create a chapter.
+        create multiple chapters.
         """
         book.metadata = metadata
-        book.make_chapter("Chapter One", 1)
-        book.make_chapter("Chapter Two", 2)
-        book.make_chapter("Chapter Three", 3)
+        book.make_chapter("Chapter One")
+        book.chapters[-1].content = u'سقوط'
+        book.make_chapter("Chapter Two")
+        book.chapters[-1].content = u'მალის'
+        book.make_chapter("Chapter Three")
+        book.chapters[-1].content = u'きどさ'
 
         assert len(book.chapters) == 3
         assert len(book.book.items) == 3
+
+    def test_make_chapter_title(self, metadata, book):
+        """
+        create a chapter with a title.
+        """
+        book.metadata = metadata
+        book.make_chapter("Chapter One")
+        book.chapters[-1].content = u'سقوط'
+        book.make_chapter("Chapter Two")
+        book.chapters[-1].content = u'მალის'
+        book.make_chapter("Chapter Three")
+        book.chapters[-1].content = u'きどさ'
+
         assert book.chapters[2].title == "Chapter Three"
-        assert book.chapters[2].content == u''
+
+    def test_make_chapter_content(self, metadata, book):
+        """
+        create a chapter with content.
+        """
+        book.metadata = metadata
+        book.make_chapter("Chapter One")
+        book.chapters[-1].content = u'سقوط'
+        book.make_chapter("Chapter Two")
+        book.chapters[-1].content = u'მალის'
+        book.make_chapter("Chapter Three")
+        book.chapters[-1].content = u'きどさ'
+
+        assert book.chapters[2].content == u'きどさ'
+
+    def test_make_chapter_filename(self, metadata, book):
+        """
+        a chapter gets a predictable filename
+        """
+        book.metadata = metadata
+        book.make_chapter("Chapter One")
+        book.chapters[-1].content = u'سقوط'
+        book.make_chapter("Chapter Two")
+        book.chapters[-1].content = u'მალის'
+        book.make_chapter("Chapter Three")
+        book.chapters[-1].content = u'きどさ'
+
         assert book.chapters[2].file_name == 'chap_0003.xhtml'
