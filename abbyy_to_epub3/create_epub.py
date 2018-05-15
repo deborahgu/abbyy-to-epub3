@@ -1022,7 +1022,8 @@ class Ebook(ArchiveBookItem):
         # Even if we clean up properly afterwards, using TemporaryDirectory
         # outside of a context manager seems to cause a resource leak
         if tmpdir:
-            tmpdir = os.makedirs(tmpdir, exist_ok=True)
+            tmpdir = os.path.abspath(path)
+            os.makedirs(tmpdir, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=tmpdir) as self.tmpdir:
             self.abbyy_file = "{tmp}/{base}_abbyy".format(
                 tmp=self.tmpdir, base=self.item_identifier
