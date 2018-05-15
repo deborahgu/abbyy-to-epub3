@@ -467,25 +467,37 @@ class Ebook(ArchiveBookItem):
         """
         Create a chapter section in an ebooklib.epub.
         """
+        # If we haven't passed a heading, just use the inferred chapter number
+        # which won't correspond to the original's chapters.
         if not heading:
             heading = "Chapter {}".format(chapter_no)
 
-        # The epub library escapes the XML itself
-        chapter = epub.EpubHtml(
-            title=dirtify_xml(heading).replace("\n", " "),
-            direction=self.progression,
-            # pad out the filename to four digits
-            file_name='chap_{:0>4}.xhtml'.format(chapter_no),
-            lang='{}'.format(self.metadata['language'][0])
-        )
-        chapter.content = u''
-        chapter.add_link(
-            href='style/style.css', rel='stylesheet', type='text/css'
-        )
-        self.chapters.append(chapter)
-        self.book.add_item(chapter)
+        # If the previous chapter's content is empty, merge the two
+        # Use the first chapter's chapter name and number, which are
+        # likely to have been set by scandata and not OCR'd text.
+        if self.chapters and self.chapters[-1].content == u'':
+            chapter = self.chapters[-1]
+            chapter.content = u'<h2>{}</h2>'.format(heading)
+        else:
+            # Increment the chapter number before creating a new one
+            chapter_no += 1
 
-        return chapter
+            # The epub library escapes the XML itself
+            chapter = epub.EpubHtml(
+                title=dirtify_xml(heading).replace("\n", " "),
+                direction=self.progression,
+                # pad out the filename to four digits
+                file_name='chap_{:0>4}.xhtml'.format(chapter_no),
+                lang='{}'.format(self.metadata['language'][0])
+            )
+            chapter.content = u''
+            chapter.add_link(
+                href='style/style.css', rel='stylesheet', type='text/css'
+            )
+            self.chapters.append(chapter)
+            self.book.add_item(chapter)
+
+        return chapter_no, chapter
 
     def identify_headers_footers_pagenos(self, placement):
         """
@@ -752,7 +764,7 @@ class Ebook(ArchiveBookItem):
         self.last_cell = False
 
         # Make the initial chapter stub
-        chapter = self.make_chapter(heading, chapter_no)
+        chapter_no, chapter = self.make_chapter(heading, chapter_no)
         endnotes = '<ul>'
         noteref = 1
 
@@ -866,8 +878,9 @@ class Ebook(ArchiveBookItem):
                 'title': 'Title Page',
             }
             if (pagetype in pagetypes and pagetype != prev_pagetype):
-                chapter_no += 1
-                chapter = self.make_chapter(pagetypes[pagetype], chapter_no)
+                chapter_no, chapter = self.make_chapter(
+                    pagetypes[pagetype], chapter_no
+                )
 
             if block['type'] == 'Text':
                 text = block['text']
@@ -945,8 +958,9 @@ class Ebook(ArchiveBookItem):
                             endnotes = '<ol>'
 
                         # Heading 1. Begin the new chapter
-                        chapter_no += 1
-                        chapter = self.make_chapter(text, chapter_no)
+                        chapter_no, chapter = self.make_chapter(
+                            text, chapter_no
+                        )
                         chapter.content = u'<h{lev}>{text}</h{lev}>'.format(
                             lev=block['heading'], text=text
                         )
