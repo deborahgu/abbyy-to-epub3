@@ -37,6 +37,7 @@ Requirements
 
 * Python 3
 * If running epubcheck, a Java Runtime environment
+* If running DAISY Ace, NodeJS version >= 6.4.0
 * If using Kakadu, `install the binaries <http://kakadusoftware.com/downloads/>`_ and add the your  PATH and LD_LIBRARY_PATH
 
 Usage
@@ -60,7 +61,7 @@ The available command line arguments are:
 
 .. code:: bash 
 
-    usage: abbyy2epub [-h] [-d] [--epubcheck] docname
+    usage: abbyy2epub [-h] [-d] [--epubcheck level] [--ace level] docname
 
     Process an ABBYY file into an EPUB
 
@@ -73,19 +74,40 @@ The available command line arguments are:
     optional arguments:
       -h, --help   show this help message and exit
       -d, --debug  Show debugging information
-      --epubcheck  Run EpubCheck on the newly created EPUB
+      --epubcheck  Run EpubCheck on the newly created EPUB, given a severity level
+      --ace  Run DAISY Ace on the newly created EPUB, given a severity level
 
 
 System dependencies
 ===================
 
-If you'd like to run `epubcheck <https://github.com/IDPF/epubcheck>`_, there
+*Epubcheck*: If you'd like to run `epubcheck <https://github.com/IDPF/epubcheck>`_, there
 are certain system dependencies.  Depending on running environment, these may
 need to be manually installed.  On Ubuntu, I installed these with:
 
 .. code:: bash
 
     sudo apt-get install default-jre libpython3-dev
+
+*DAISY Ace*: If you'd like to run `Ace <https://daisy.github.io/ace/>`_, there
+are certain system dependencies.  Read the `installation instructions <https://daisy.github.io/ace/getting-started/installation/>`_, but in a nutshell:
+
+* Install `NodeJS <https://nodejs.org/>`_. *Important*: You need at least version 6.4.0, which is newer than the version in the package manager for many distributions. (E.g. versions of Ubuntu before 17.10 Artful). If you have an older version on your system and you can't upgrade, consider running NodeJS in an isolated environment such as `nodeenv <https://github.com/ekalinin/nodeenv>`_.
+* Install Ace:
+
+.. code:: bash
+
+    npm install @daisy/ace -g
+
+* Create a configuration file for the user account who'll be running the code, in `~/.config/DAISY Ace/`. You can modify the configuration `per the documentation <https://daisy.github.io/ace/docs/config/>_` but be sure to add this block:
+
+.. code:: json
+
+    {
+        "cli": {
+            "return-2-on-validation-error": true
+        }
+    }
 
 
 Installation
