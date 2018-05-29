@@ -117,10 +117,11 @@ class Ebook(ArchiveBookItem):
     Holds extracted information about a book & the ebooklib EPUB object.
     """
     DEFAULT_EPUBCHECK_LEVEL = 'warning'
+    DEFAULT_ACE_LEVEL = 'minor'
 
     def __init__(
             self, item_dir, item_identifier, item_bookpath,
-            debug=False, epubcheck=None
+            debug=False, epubcheck=None, ace=None,
     ):
 
         self.logger = logging.getLogger(__name__)
@@ -134,6 +135,10 @@ class Ebook(ArchiveBookItem):
             # If no epubcheck specified and we're in debug mode, run
             # --epubcheck warning
             self.DEFAULT_EPUBCHECK_LEVEL if self.debug else None)
+        self.ace = ace or (
+            # If no ace specified and we're in debug mode, run
+            # --ace minor
+            self.DEFAULT_ACE_LEVEL if self.debug else None)
         self.metadata = {}     # the book's metadata
         self.blocks = []       # all <blocks> with contents, attributes
         self.paragraphs = {}   # paragraph style info
@@ -145,6 +150,7 @@ class Ebook(ArchiveBookItem):
         self.firsts = {}       # all first lines per-page
         self.lasts = {}        # all last lines per-page
         self.pages = OrderedDict()    # page-by-page information from scandata
+        self.chapter_no = 0    # current number of identified chapters
 
         # are there headers, footers, or page numbers?
         self.headers_present = False
@@ -463,27 +469,39 @@ class Ebook(ArchiveBookItem):
 
         return content
 
-    def make_chapter(self, heading, chapter_no):
+    def make_chapter(self, heading):
         """
         Create a chapter section in an ebooklib.epub.
         """
+        # If we haven't passed a heading, just use the inferred chapter number
+        # which won't correspond to the original's chapters.
         if not heading:
-            heading = "Chapter {}".format(chapter_no)
+            heading = "Chapter {}".format(self.chapter_no)
 
-        # The epub library escapes the XML itself
-        chapter = epub.EpubHtml(
-            title=dirtify_xml(heading).replace("\n", " "),
-            direction=self.progression,
-            # pad out the filename to four digits
-            file_name='chap_{:0>4}.xhtml'.format(chapter_no),
-            lang='{}'.format(self.metadata['language'][0])
-        )
-        chapter.content = u''
-        chapter.add_link(
-            href='style/style.css', rel='stylesheet', type='text/css'
-        )
-        self.chapters.append(chapter)
-        self.book.add_item(chapter)
+        # If the previous chapter's content is empty, merge the two
+        # Use the first chapter's chapter name and number, which are
+        # likely to have been set by scandata and not OCR'd text.
+        if self.chapters and self.chapters[-1].content == u'':
+            chapter = self.chapters[-1]
+            chapter.content = u'<h2>{}</h2>'.format(heading)
+        else:
+            # Increment the chapter number before creating a new one
+            self.chapter_no += 1
+
+            # The epub library escapes the XML itself
+            chapter = epub.EpubHtml(
+                title=dirtify_xml(heading).replace("\n", " "),
+                direction=self.progression,
+                # pad out the filename to four digits
+                file_name='chap_{:0>4}.xhtml'.format(self.chapter_no),
+                lang='{}'.format(self.metadata['language'][0])
+            )
+            chapter.content = u''
+            chapter.add_link(
+                href='style/style.css', rel='stylesheet', type='text/css'
+            )
+            self.chapters.append(chapter)
+            self.book.add_item(chapter)
 
         return chapter
 
@@ -737,7 +755,6 @@ class Ebook(ArchiveBookItem):
             heading = self.metadata['title'][0]
         else:
             heading = "Opening Section"
-        chapter_no = 1
         self.picnum = 1
         blocks_index = -1
         self.last_row = False
@@ -752,7 +769,7 @@ class Ebook(ArchiveBookItem):
         self.last_cell = False
 
         # Make the initial chapter stub
-        chapter = self.make_chapter(heading, chapter_no)
+        chapter = self.make_chapter(heading)
         endnotes = '<ul>'
         noteref = 1
 
@@ -866,8 +883,7 @@ class Ebook(ArchiveBookItem):
                 'title': 'Title Page',
             }
             if (pagetype in pagetypes and pagetype != prev_pagetype):
-                chapter_no += 1
-                chapter = self.make_chapter(pagetypes[pagetype], chapter_no)
+                chapter = self.make_chapter(pagetypes[pagetype])
 
             if block['type'] == 'Text':
                 text = block['text']
@@ -945,8 +961,7 @@ class Ebook(ArchiveBookItem):
                             endnotes = '<ol>'
 
                         # Heading 1. Begin the new chapter
-                        chapter_no += 1
-                        chapter = self.make_chapter(text, chapter_no)
+                        chapter = self.make_chapter(text)
                         chapter.content = u'<h{lev}>{text}</h{lev}>'.format(
                             lev=block['heading'], text=text
                         )
@@ -1020,9 +1035,10 @@ class Ebook(ArchiveBookItem):
         """ Assemble the extracted metadata & text into an EPUB  """
 
         # Even if we clean up properly afterwards, using TemporaryDirectory
-        # outside of a convtext manager seems to cause a resource leak
+        # outside of a context manager seems to cause a resource leak
         if tmpdir:
-            tmpdir = os.makedirs(tmpdir, exist_ok=True)
+            tmpdir = os.path.abspath(tmpdir)
+            os.makedirs(tmpdir, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=tmpdir) as self.tmpdir:
             self.abbyy_file = "{tmp}/{base}_abbyy".format(
                 tmp=self.tmpdir, base=self.item_identifier
@@ -1081,71 +1097,72 @@ class Ebook(ArchiveBookItem):
             self.craft_html()
             self.logger.debug("Done assembling the HTML")
 
-        # Set the book's metadata
-        self.set_metadata()
+            # Set the book's metadata
+            self.set_metadata()
 
-        # set the accessibility metadata
-        self.create_accessibility_metadata()
+            # set the accessibility metadata
+            self.create_accessibility_metadata()
 
-        # Navigation for EPUB 3 & EPUB 2 fallback
-        self.book.toc = self.chapters
-        self.book.add_item(epub.EpubNcx())
-        self.book.add_item(epub.EpubNav())
-        # cover_ncx hack to work around Adobe Digital Editions problem
-        self.book.spine = ['cover', 'nav', ] + self.chapters
+            # Navigation for EPUB 3 & EPUB 2 fallback
+            self.book.toc = self.chapters
+            self.book.add_item(epub.EpubNcx())
+            self.book.add_item(epub.EpubNav())
+            # cover_ncx hack to work around Adobe Digital Editions problem
+            self.book.spine = ['cover', 'nav', ] + self.chapters
 
-        # define CSS style
-        style = """
-            .center {text-align: center}
-            .sr-only {
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                padding: 0;
-                margin: -1px;
-                overflow: hidden;
-                clip: rect(0,0,0,0);
-                border: 0;
-            }
-            .strong {font-weight: bold;}
-            .italic {font-style: italic;}
-            .serif {font-family: serif;}
-            .sans {font-family: sans-serif;}
-            .big {font-size: 1.5em;}
-            .small {font-size: .75em;}
-            .offset {
-                margin: 1em;
-                padding: 1.5em;
-                border: black 1px solid;
-            }
-            img {
-                padding: 0;
-                margin: 0;
-                max-width: 100%;
-                max-height: 100%;
-                column-count: 1;
-                break-inside: avoid;
-                oeb-column-number: 1;
-            }
-            """
+            # define CSS style
+            style = """
+                .center {text-align: center}
+                .sr-only {
+                    width: 1px;
+                    height: 1px;
+                    padding: 0;
+                    margin: -1px;
+                    overflow: hidden;
+                    clip: rect(0,0,0,0);
+                    border: 0;
+                }
+                .strong {font-weight: bold;}
+                .italic {font-style: italic;}
+                .serif {font-family: serif;}
+                .sans {font-family: sans-serif;}
+                .big {font-size: 1.5em;}
+                .small {font-size: .75em;}
+                .offset {
+                    margin: 1em;
+                    padding: 1.5em;
+                    border: black 1px solid;
+                }
+                img {
+                    padding: 0;
+                    margin: 0;
+                    max-width: 100%;
+                    max-height: 100%;
+                    column-count: 1;
+                    break-inside: avoid;
+                    oeb-column-number: 1;
+                }
+                """
 
-        css_file = epub.EpubItem(
-            uid="style_nav",
-            file_name="style/style.css",
-            media_type="text/css",
-            content=style
-        )
-        self.book.add_item(css_file)
+            css_file = epub.EpubItem(
+                uid="style_nav",
+                file_name="style/style.css",
+                media_type="text/css",
+                content=style
+            )
+            self.book.add_item(css_file)
 
-        if epub_outfile.endswith('.epub'):
-            epub_outfile = epub_outfile
-        else:
-            epub_outfile = '%s.epub' % epub_outfile
-        epub.write_epub(epub_outfile, self.book, {})
+            if epub_outfile.endswith('.epub'):
+                epub_outfile = epub_outfile
+            else:
+                epub_outfile = '%s.epub' % epub_outfile
+            epub.write_epub(epub_outfile, self.book, {})
 
-        # run validation on epub
-        if self.debug or self.epubcheck:
-            self.validate_epub(epub_outfile, level=self.epubcheck)
+            # run validation on epub
+            if self.debug or self.epubcheck:
+                self.validate_epub(epub_outfile, level=self.epubcheck)
+            if self.debug or self.ace:
+                self.validate_a11y(epub_outfile, level=self.ace)
 
     def validate_epub(self, epub_file, level=None):
         self.logger.debug("Running EpubCheck on {}".format(epub_file))
@@ -1164,5 +1181,68 @@ class Ebook(ArchiveBookItem):
         errors = [err for err in result.messages if
                   # only keep desired_levels
                   err.level.lower() in desired_levels]
+        if errors:
+            raise RuntimeError(errors)
+
+    def validate_a11y(self, epub_file, level=None):
+        """
+        Individual test failures are logged in EARL syntax
+        https://daisy.github.io/ace/docs/report-json/
+        Structurally:
+        "assertions": [
+            {
+              "@type": "earl:assertion",
+              "earl:result": {
+                "earl:outcome": "fail"
+              },
+              "assertions": [
+                {
+                  "@type": "earl:assertion",
+                  "earl:result": {
+                    "earl:outcome": "fail",
+                    "html": "[The invalid HTML]"
+                  },
+                  "earl:test": {
+                    "earl:impact": "serious",
+                    "help": {
+                      "dct:description": "[Plain language error]"
+                    },
+                  }
+                }
+              ],
+              "earl:testSubject": {
+                "url": "cover.xhtml",
+              },
+            },
+        ]
+        """
+        self.logger.debug("Running DAISY Ace on {}".format(epub_file))
+        LEVELS = ['minor', 'moderate', 'serious', 'critical']
+        level = level.lower() or self.DEFAULT_ACE_LEVEL
+        try:
+            desired_levels = LEVELS[LEVELS.index(level):]
+        except ValueError:
+            self.logger.error(
+                "Invalid --ace level: `%s`.\n"
+                "Falling back to default: `%s`" % (
+                    level, self.DEFAULT_ACE_LEVEL))
+            desired_levels = LEVELS
+
+        result, error = self.verifier.run_ace(epub_file, self.tmpdir)
+
+        # Build a list of errors, with the most important fields
+        errors = list()
+        if 'assertions' in result:
+            for assertion in result['assertions']:
+                if (
+                    assertion['@type'] == "earl:assertion" and
+                    assertion['earl:result']['earl:outcome'] == "fail"
+                ):
+                    test_subject = assertion['earl:testSubject']['url']
+                    for each in assertion['assertions']:
+                        err_level = each['earl:test']['earl:impact']
+                        if err_level.lower() in desired_levels:
+                            each['earl:testSubject'] = test_subject
+                            errors.append(each)
         if errors:
             raise RuntimeError(errors)

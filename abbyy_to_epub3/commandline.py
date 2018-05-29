@@ -68,6 +68,14 @@ def main():
         help='Run EpubCheck on the newly created EPUB. '
         'Options: `warning` & worse (default), `error` & worse, `fatal` only',
     )
+    parser.add_argument(
+        '--ace',
+        nargs='?',
+        const=Ebook.DEFAULT_ACE_LEVEL,
+        help='Run DAISY Ace on the newly created EPUB. '
+        'Options: `critical` & worse, `serious` & worse, '
+        '`moderate` & worse, `minor` (default)',
+    )
     args = parser.parse_args()
 
     if args is not None:
@@ -81,6 +89,7 @@ def main():
             args.item_bookpath,
             debug=debug,
             epubcheck=args.epubcheck,
+            ace=args.ace,
         )
         book.craft_epub(
             epub_outfile=args.out or 'out.epub', tmpdir=args.tmpdir

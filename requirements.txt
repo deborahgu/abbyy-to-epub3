@@ -3,10 +3,11 @@ epubcheck>=0.3.1
 fuzzywuzzy[speedup]>=0.15.1
 lxml>=3.8.0
 mock>=2.0.0
+numeral>=0.1.0.11
 pillow>=4.2.1
+pycountry>=18.5.20
 PyExecJs>=1.4.1
 pytest>=3.2.2
-numeral>=0.1.0.11
 six>=1.10.0
 sphinx>=1.6.0
 sphinx-autobuild
