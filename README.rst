@@ -77,7 +77,6 @@ The available command line arguments are:
       --epubcheck  Run EpubCheck on the newly created EPUB, given a severity level
       --ace  Run DAISY Ace on the newly created EPUB, given a severity level
 
-
 System dependencies
 ===================
 
