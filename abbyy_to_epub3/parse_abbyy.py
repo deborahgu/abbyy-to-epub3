@@ -21,6 +21,7 @@ from lxml import etree
 
 import gc
 import logging
+import pycountry
 
 from abbyy_to_epub3 import constants
 from abbyy_to_epub3.utils import fast_iter, gettext, sanitize_xml
@@ -214,8 +215,14 @@ class AbbyyParser(object):
                 self.metadata[term.tag] = [term.text, ]
 
         # if the language isn't explicitly set, assume English
+        # convert to the correct ISO standard
         if 'language' not in self.metadata:
-            self.metadata['language'] = 'eng'
+            self.metadata['language'] = ['en']
+        else:
+            lang_code = self.metadata['language'][0]
+            if len(lang_code) == 3:
+                lang = pycountry.languages.get(alpha_3=lang_code)
+                self.metadata['language'][0] = lang.alpha_2
 
     def parse_abbyy(self):
         """

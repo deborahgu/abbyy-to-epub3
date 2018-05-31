@@ -18,6 +18,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from collections import OrderedDict
+from tempfile import TemporaryDirectory
+
 import os
 import json
 import pytest
@@ -162,3 +164,31 @@ class TestAbbyyParser(object):
         book.chapters[-1].content = u'きどさ'
 
         assert book.chapters[2].file_name == 'chap_0003.xhtml'
+
+    def test_validate_a11y_minor(self, book):
+        """
+        Epubcheck reports minor errors when requested.
+        """
+        expected = "Ensure the element has an ARIA role matching its epub:type"
+        book.tmpdir = TemporaryDirectory().name
+
+        with pytest.raises(RuntimeError) as e:
+            book.validate_a11y(
+                "{}/sample.epub".format(TEST_DIR), level='minor'
+            )
+
+        assert expected in e.exconly()
+
+    def test_validate_a11y_serious(self, book):
+        """
+        Epubcheck ignores minor errors when requested.
+        """
+        expected = "Ensure the element has an ARIA role matching its epub:type"
+        book.tmpdir = TemporaryDirectory().name
+
+        with pytest.raises(RuntimeError) as e:
+            book.validate_a11y(
+                "{}/sample.epub".format(TEST_DIR), level='serious'
+            )
+
+        assert expected not in e.exconly()
