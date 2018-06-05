@@ -37,7 +37,7 @@ def add_last_text(blocks, page):
         elem = blocks[-1]
         if 'page_no' not in elem:
             return
-        # return if we reacherd the previous page without hitting text
+        # return if we reached the previous page without hitting text
         if elem['page_no'] <= page:
             return
         # If page_no is here and is text, set elem to 'last'
