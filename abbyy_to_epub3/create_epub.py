@@ -1071,6 +1071,7 @@ class Ebook(ArchiveBookItem):
                 debug=self.debug,
             )
             parser.parse_abbyy()
+            self.logger.debug("Done with parse_abbyy")
 
             # Text direction: convert IA abbreviation to epub abbreviation
             direction = {
@@ -1094,6 +1095,7 @@ class Ebook(ArchiveBookItem):
                 self.version = self.metadata['fr-version']
 
             # make the HTML chapters
+            self.logger.debug("craft_html")
             self.craft_html()
             self.logger.debug("Done assembling the HTML")
 

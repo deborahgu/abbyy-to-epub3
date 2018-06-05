@@ -35,10 +35,12 @@ def add_last_text(blocks, page):
     while len(blocks) >= 1:
         # Look for a page number in the last block our list
         elem = blocks[-1]
-        # If page_no isn't here, we're at end of previous page
         if 'page_no' not in elem:
             return
-        # If page_no is here and matches, set elem to 'last'
+        # return if we reacherd the previous page without hitting text
+        if elem['page_no'] <= page:
+            return
+        # If page_no is here and is text, set elem to 'last'
         if elem['page_no'] == page:
             if 'type' in elem and elem['type'] == 'text':
                 elem['last'] = True
@@ -248,11 +250,13 @@ class AbbyyParser(object):
         # Get the namespace & the FR version, so we can find the other elements
         self.find_namespace()
 
+        self.logger.debug("Beginning iterparse")
         # paragraphStyle is a prerequisite for page
         context = etree.iterparse(
             self.document,
             events=('end',),
         )
+        self.logger.debug("fast_iter on process_styles")
         fast_iter(context, self.process_styles)
         del context
 
@@ -268,14 +272,17 @@ class AbbyyParser(object):
                     ]
 
         # parse the metadata document next
+        self.logger.debug("parse_metadata")
         self.parse_metadata()
 
         # finally, extract the individual page elements from the XML
+        self.logger.debug("Beginning iterparse on pages")
         context = etree.iterparse(
             self.document,
             events=('end',),
             tag="{{{}}}page".format(self.ns),
         )
+        self.logger.debug("fast_iter on process_pages")
         fast_iter(context, self.process_pages)
         del context
 
