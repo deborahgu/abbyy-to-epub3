@@ -86,3 +86,47 @@ class TestAbbyyParser(object):
         result = sanitize_xml(text)
 
         assert result == good
+
+    def test_parse_iso639_1(self, finereader10):
+        """ Understands an ISO 639-1 (alpha-2) language entry. """
+        parser = finereader10
+        self.metadata['language'] = ['wo']
+        parser.parse_metadata()
+
+        assert self.metadata['language'][0] == 'wo'
+
+    def test_parse_iso639_2T(self, finereader10):
+        """
+        Understands an ISO 639-2/T (alpha-3 terminological) language entry.
+        """
+        parser = finereader10
+        self.metadata['language'] = ['deu']
+        parser.parse_metadata()
+
+        assert self.metadata['language'][0] == 'de'
+
+    def test_parse_iso639_2B(self, finereader10):
+        """
+        Understands an ISO 639-2/B (alpha-3 bibliographic) language entry.
+        """
+        parser = finereader10
+        self.metadata['language'] = ['ger']
+        parser.parse_metadata()
+
+        assert self.metadata['language'][0] == 'de'
+
+    def test_parse_iso639_6(self, finereader10):
+        """ Understands an ISO 639-6 (English name) language entry. """
+        parser = finereader10
+        self.metadata['language'] = ['Cree']
+        parser.parse_metadata()
+
+        assert self.metadata['language'][0] == 'cr'
+
+    def test_parse_bad_lang(self, finereader10):
+        """ If language entry is bogus, set to English. """
+        parser = finereader10
+        self.metadata['language'] = ['Rikchik']
+        parser.parse_metadata()
+
+        assert self.metadata['language'][0] == 'en'
