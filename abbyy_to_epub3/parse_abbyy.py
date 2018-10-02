@@ -22,6 +22,7 @@ from lxml import etree
 import gc
 import logging
 import pycountry
+import re
 
 from abbyy_to_epub3 import constants
 from abbyy_to_epub3.utils import fast_iter, gettext, sanitize_xml
@@ -382,7 +383,24 @@ class AbbyyParser(object):
                         )
                     )
                     self.paragraphs[para_id] = dict()
-                text = gettext(para).strip()
+
+                # Preserve line breaks so we can strip EOL hyphens and pad
+                # whitespace at line endings
+                # newlines
+                lines = para.iterdescendants(
+                    tag="{{{}}}line".format(self.ns)
+                )
+                text = ''
+                for line in lines:
+                    linetext = gettext(line).strip()
+                    # replace EOL hyphens with whitespace stripping
+                    # add whitespace at end of all other lines
+                    text_clean = sanitize_xml(linetext)
+                    text_pad = re.sub(r'([^¬-])\Z', r'\1 ', text_clean)
+                    text_complete = re.sub(r'[¬-]\s*\Z', r'', text_pad)
+                    text += text_complete
+                    line.clear()
+                del(lines)
 
                 # Ignore whitespace-only pars
                 if not text:
@@ -400,12 +418,10 @@ class AbbyyParser(object):
                     continue
 
                 # This is a good text chunk. Instantiate the block.
-                # The modern ABBYY parser is consistent in its handling
-                # of EOL hyphens, making it safe to strip them.
                 self.blocks.append({
                     'type': 'Text',
                     'page_no': self.page_no,
-                    'text': sanitize_xml(text).replace('¬\n', ''),
+                    'text': text,
                     'role': role,
                     'style': self.paragraphs[para_id],
                 })
@@ -480,11 +496,29 @@ class AbbyyParser(object):
                         # an empty cell. If so, placeholder
                         if not text and paras_in_cell > 1:
                             continue
+
+                        # Preserve line breaks to strip EOL hyphens & pad
+                        # whitespace at line endings
+                        lines = para.iterdescendants(
+                            tag="{{{}}}line".format(self.ns)
+                        )
+                        text = ''
+                        for line in lines:
+                            linetext = gettext(line).strip()
+                            # replace EOL hyphens with whitespace stripping
+                            # add whitespace at end of all other lines
+                            text_clean = sanitize_xml(linetext)
+                            text_pad = re.sub(r'([^¬-])\Z', r'\1 ', text_clean)
+                            text_complete = re.sub(r'[¬-]\s*\Z', r'', text_pad)
+                            text += text_complete
+                            line.clear()
+                        del(lines)
+
                         self.blocks.append({
                             'type': 'TableText',
                             'style': blockattr,
                             'page_no': self.page_no,
-                            'text': sanitize_xml(text),
+                            'text': text,
                         })
                         if this_contents == paras_in_cell:
                             self.blocks[-1]['last_table_elem'] = True

@@ -53,7 +53,10 @@ def sanitize_xml(text):
 
 
 def gettext(elem):
-    """ Given an element, get all text from within element and its children """
+    """
+    Given an element, get all text from within element and its children.
+    Strips out file artifact whitespace (unlike etree.itertext).
+    """
     text = elem.text or ""
     for e in elem:
         text += gettext(e)
@@ -62,7 +65,6 @@ def gettext(elem):
     return text
 
 
-#@profile
 def fast_iter(context, func):
     """
     Garbage collect as you iterate to save memory
