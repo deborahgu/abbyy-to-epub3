@@ -29,6 +29,7 @@ import configparser
 import gzip
 import logging
 import os
+import sys
 import re
 import subprocess
 import tempfile
@@ -47,6 +48,7 @@ config = configparser.ConfigParser()
 configfile = resource_filename("abbyy_to_epub3", "config.ini")
 config.read(configfile)
 
+ERR_MISSING_SCANDATA = 3
 
 class ArchiveBookItem(object):
     """Archive.org is a website which contains an archive of items
@@ -105,6 +107,8 @@ class ArchiveBookItem(object):
                 self.logger.debug(
                     "Invalid path to %s.%s: %s" % (name, ext, dependency)
                 )
+                if name == "scandata":
+                    sys.exit(ERR_MISSING_SCANDATA)
                 raise OSError(
                     "Invalid path to %s.%s: %s" % (name, ext, dependency)
                 )
