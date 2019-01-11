@@ -227,7 +227,10 @@ class AbbyyParser(object):
             lang_code = self.metadata['language'][0]
             try:
                 lang = pycountry.languages.lookup(lang_code)
-                self.metadata['language'][0] = lang.alpha_2
+                self.metadata['language'][0] = (
+                    getattr(lang, 'alpha_2', None) or
+                    getattr(lang, 'alpha_3', None)
+                )
             except LookupError:
                 self.logger.debug(
                     "Invalid language code {}. Setting to English".format(
