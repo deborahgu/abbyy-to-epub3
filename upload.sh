@@ -9,5 +9,3 @@ devpi login books
 devpi use books/formats
 devpi upload
 pip3 install --upgrade -i https://devpi.archive.org/books/formats abbyy_to_epub3
-
-
