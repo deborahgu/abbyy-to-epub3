@@ -355,6 +355,7 @@ class AbbyyParser(object):
             # with content.
             if (
                 self.metadata['PAGES_SUPPORT'] and
+                len(self.blocks) > 1 and
                 self.blocks[-1]['type'] != 'Page'
             ):
                 self.blocks.append({

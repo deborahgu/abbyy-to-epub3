@@ -5,7 +5,7 @@ fuzzywuzzy[speedup]==0.17.0
 lxml==4.4.1
 mock==3.0.5
 numeral==0.1.0.11
-pillow==6.1.0
+pillow>=6.2.1
 pycountry==19.8.18
 PyExecJs==1.5.1
 pytest==5.2.0
