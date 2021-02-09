@@ -2,7 +2,7 @@ ebooklib==0.17.1
 epubcheck==0.4.2
 openpyxl==2.6.3
 fuzzywuzzy[speedup]==0.17.0
-lxml==4.4.1
+lxml>=4.6.2
 mock==3.0.5
 numeral==0.1.0.11
 pillow>=6.2.1
